@@ -51,18 +51,6 @@ def make_and_save_hls(output_supdir, hls_dir, bbox):
     saver = lambda region,t,b : _hls_saver(region, path_stub, t, b, bbox)
     get_hls_subregions_all(hls_dir, bbox, saver)
     
-#    for b,hls_by_band in enumerate(hls_all):
-#        band = b+1 # TODO, make dict?
-#        for t,hls_img_t in enumerate(hls_by_band):
-#            time_pt = t+7 # TODO
-#            name_stub = "hls_%s_band%d_time%d_%d_%d_%d_%d" \
-#                    % (os.path.basename(hls_dir), band, time, bbox[0], bbox[1],
-#                            bbox[2], bbox[3])
-#            img_name_png = name_stub + ".png"
-#            img_name_npy = name_stub + ".npy"
-#            cv2.imwrite(pj(hls_dir, img_name_png), hls_img_t)
-#            np.save(pj(hls_dir, img_name_npy), hls_img_t)
-#
 
 def main(args):
     bbox = get_chip_bbox(args.image_x, args.image_y, args.image_size)

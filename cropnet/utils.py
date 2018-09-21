@@ -39,15 +39,16 @@ def get_hls_subregions_all(hls_dir, bbox, saver=None):
 
 def get_hls_subregions_by_time(timepoint, hls_dir, bbox, saver=None):
     regions = []
-    for i in range(1,g_num_spectral+1):
-        path = pj(hls_dir, "hls_cls_ark_%02d.tif" % (i))
+    for b in range(1,g_num_spectral+1):
+        path = pj(hls_dir, "hls_cls_ark_%02d.tif" % (b))
         img = gdal.Open(path)
         if img is None:
             raise RuntimeError("Tmage %s not found" % (path))
         layer = img.GetRasterBand(timepoint)
         region = layer.ReadAsArray()
+        region = region[ bbox[0]:bbox[2], bbox[1]:bbox[3] ]
         if saver is not None:
-            regions.append( region[ bbox[0]:bbox[2], bbox[1]:bbox[3] ] )
+            regions.append(region)
         else:
             saver(region, path)
     return regions
@@ -61,13 +62,10 @@ def get_hls_subregions_by_band(band, hls_dir, bbox, saver=None):
     for t in range(g_time_start_idx, g_time_end_idx):
         layer = img.GetRasterBand(t)
         region = layer.ReadAsArray()
+        region = region[ bbox[0]:bbox[2], bbox[1]:bbox[3] ]
         if saver is None:
-            regions.append( region[ bbox[0]:bbox[2], bbox[1]:bbox[3] ] )
+            regions.append(region)
         else:
             saver(region, t)
     return regions
 
-def hls_saver(time_pt, img_path, t, b):
-
-             hls_saver(time_pt, img_path, \
-                    t, b)
