@@ -32,7 +32,9 @@ def get_cdl_chip(cdl_file, bbox):
                 % (cdl_file, cdl.dtype))
     return cdl[ bbox[0]:bbox[2], bbox[1]:bbox[3] ]
 
-def get_hls_chips(hls_dir, bbox, bbox_src):
+def get_hls_chips(hls_dir, bbox_src, bbox=None):
+    if bbox is None:
+        bbox = bbox_src
     hls_4d = []
     for b in range(1, g_num_spectral+1):
         band = []
@@ -45,6 +47,12 @@ def get_hls_chips(hls_dir, bbox, bbox_src):
         hls_4d.append( np.array(band) )
     hls_4d = np.array(hls_4d)
 
+    for b in range(g_num_spectral):
+        band = hls_4d[:,:,b,:]
+        band[:,:,:] = (band - np.min(band)) / (np.max(band) - np.min(band))
+#        hls_4d[:,:,:,b] = band
+#    hls_4d = hls_4d.astype(np.uint8)
+
     tb_chips = []
     bbox_ht = bbox[2] - bbox[0]
     bbox_wd = bbox[3] - bbox[1]
@@ -55,9 +63,10 @@ def get_hls_chips(hls_dir, bbox, bbox_src):
             tb_chips_i.append( tuple( np.squeeze(tb_chip_ij) ) )
         tb_chips.append(tb_chips_i)
             
-    return tb_chips
+    return np.array(tb_chips)
             
 def make_figure(output_dir, cdl_chip, tb_chips):
+    plt.figure(figsize=(22,10))
     nrows,chip_cols = cdl_chip.shape
     ncols = 2 * chip_cols + 2
     grid_sz = (nrows, ncols)
@@ -88,7 +97,7 @@ def main(args):
     bbox_src = get_chip_bbox(args.src_image_x, args.src_image_y, 
             args.src_image_size)
     cdl_chip = get_cdl_chip(args.ground_truth_file, bbox)
-    tb_chips = get_hls_chips(args.hls_dir, bbox, bbox_src)
+    tb_chips = get_hls_chips(args.hls_dir, bbox_src, bbox)
     make_figure(args.output_dir, cdl_chip, tb_chips)
 
 
