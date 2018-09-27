@@ -14,7 +14,7 @@ import torch.nn.functional as F
 from collections import OrderedDict
 from datasets import TBChips
 from models import CropNetFCAE
-from pyt_utils.trainer import Trainer, get_session_dir, ae_sampler
+from pyt_utils.trainer import Trainer, make_session_dir, ae_sampler
 from torch.optim import Adam, SGD
 from torch.utils.data import DataLoader
 from torchvision.utils import save_image
@@ -24,6 +24,22 @@ pe = os.path.exists
 pj = os.path.join
 HOME = os.path.expanduser("~")
 
+
+g_session_log = "session.log"
+
+def batch_writer(trainer, epoch, batch_idx, batch_len, losses):
+    loss = losses[0].item()
+    BCE = losses[1].item()
+    KLD = losses[2].item()
+    s = "\t\tTrain Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tBCE: {:.6f}" \
+            "\tKLD: {:.6f}\n".format(epoch,
+                batch_idx * batch_len,
+                len(trainer.get_train_loader().dataset),
+                100.0 * batch_idx / len(trainer.get_train_loader()),
+                loss / batch_len, BCE / batch_len, KLD / batch_len)
+    with open(pj(trainer.get_session_dir(), g_session_log), "a") as fp:
+        fp.write(s)
+        fp.flush
 
 def get_data_loader(data_dir, image_x, image_y, image_size, batch_size):
     dataset = TBChips(data_dir, image_x, image_y, image_size)
@@ -61,11 +77,11 @@ def loss_function(model_output, x, chip_size):
     # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
     KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
 
-    return BCE + KLD
+    return (BCE + KLD, BCE, KLD)
 
 
 def main(args):
-    session_dir = get_session_dir(args.output_supdir)
+    session_dir = make_session_dir(args.output_supdir)
     train_loader = get_data_loader(args.data_dir, args.src_image_x, 
             args.src_image_y, args.src_image_size, args.batch_size)
     model = get_model(19, 3) # TODO
@@ -76,7 +92,8 @@ def main(args):
             opt_getter=opt_getter,
             criterion=criterion,
             session_dir=session_dir,
-            epoch_writer=ae_sampler
+            epoch_writer=ae_sampler,
+            batch_writer=batch_writer
             )
     trainer.train()
 
@@ -92,10 +109,12 @@ if __name__ == "__main__":
     parser.add_argument("--src-image-y", type=int, default=0,
             help="Source chip left coordinate")
     parser.add_argument("--src-image-size", type=int, default=500)
+    parser.add_argument("--network", type=str, default="CropNetFCAE",
+            choices=["CropNetFCAE", "CropSeg"])
 
     parser.add_argument("--opt-name", type=str, default="Adam",
             choices=["Adam", "SGD"])
-    parser.add_argument("--batch-size", type=int, default=16)
+    parser.add_argument("--batch-size", type=int, default=64)
     
     args = parser.parse_args()
     main(args)

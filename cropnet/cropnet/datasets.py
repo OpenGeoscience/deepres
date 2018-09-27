@@ -13,7 +13,7 @@ from collections import OrderedDict
 from PIL import Image
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
-from visualize.location_image import get_chip_bbox, get_hls_chips
+from visualize.location_image import get_chip_bbox, load_tb_chips
 
 
 logging.getLogger("PIL").setLevel(logging.WARNING)
@@ -24,10 +24,6 @@ pe = os.path.exists
 pj = os.path.join
 HOME = os.path.expanduser("~")
 
-#bbox = get_chip_bbox(args.chip_x, args.chip_y, args.chip_size)
-#bbox_src = get_chip_bbox(args.src_image_x, args.src_image_y,
-#        args.src_image_size)
-#tb_chips = get_hls_chips(args.hls_dir, bbox, bbox_src)
 
 # Time-Band Chips, where Band is spectral band
 class TBChips(Dataset):
@@ -46,8 +42,6 @@ class TBChips(Dataset):
         i = index // self._src_image_size
         j = index % self._src_image_size
         tb_chip = np.squeeze( self._tb_chips[i,j] )
-#        tb_chip = tb_chip / 255.0
-#        tb_chip = tv.transforms.ToTensor()(tb_chip)
         tb_chip = torch.FloatTensor(tb_chip).unsqueeze(0)
         return tb_chip,tb_chip
 
@@ -55,7 +49,7 @@ class TBChips(Dataset):
         return self._N
 
     def _get_tb_chips(self):
-        bbox = get_chip_bbox(self._src_image_x, self._src_image_y, 
+        src_bbox = get_chip_bbox(self._src_image_x, self._src_image_y, 
                 self._src_image_size)
-        self._tb_chips = get_hls_chips(self._data_dir, bbox)
-        self._N = len(self._tb_chips)
+        self._tb_chips = load_tb_chips(self._data_dir, src_bbox)
+        self._N = self._tb_chips.shape[0] * self._tb_chips.shape[1]

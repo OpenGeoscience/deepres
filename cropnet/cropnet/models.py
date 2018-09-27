@@ -28,7 +28,7 @@ class CropNetFCAE(nn.Module):
         self.fc2 = nn.Linear(100, 20)
         self.bneck1 = nn.Linear(20, self._bneck_size)
         self.bneck2 = nn.Linear(20, self._bneck_size)
-        self.fc3 = nn.Linear(3, 20)
+        self.fc3 = nn.Linear(self._bneck_size, 20)
         self.fc4 = nn.Linear(20, 100)
         self.fc5 = nn.Linear(100, chip_size_sq)
 
@@ -58,6 +58,7 @@ class CropNetFCAE(nn.Module):
         if self.training:
             std = logvar.mul(0.5).exp_()
             eps = Variable( std.data.new(std.size()).normal_() )
+                # !!! TODO, want a uniform variable here??
             z = eps.mul(std).add_(mu)
         else:
             z = mu
