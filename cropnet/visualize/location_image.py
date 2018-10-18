@@ -23,7 +23,31 @@ g_num_spectral = 19
 g_time_start_idx = 7
 g_time_end_idx = 26
 g_hls_stub = "hls_cls_ark_time%d_band%d_%d_%d_%d_%d.npy" # TODO "ark"
+g_hlstb_stub = "hls_tb_ark_%d_%d_%d_%d.npy" # TODO "ark"
 
+
+def _map_to_uniform(band):
+    band_shape = band.shape
+    b = band.flatten()
+    N = len(b)
+    sb_pairs = sorted(enumerate(b), key=lambda x: x[1])
+    idxs,_ = zip(*sb_pairs)
+    u_pairs = zip(idxs, np.linspace(0, 1, N))
+    su_pairs = sorted(u_pairs, key=lambda x: x[0])
+    _,su = zip(*su_pairs)
+    su = np.array(list(su))
+    u_band = su.reshape(*band_shape)
+    return u_band
+
+def _save_tb_chips(hls_dir, tb_chips, bbox_src, bbox):
+    bbox = list(bbox)
+    bbox[0] += bbox_src[0]
+    bbox[1] += bbox_src[1]
+    bbox[2] += bbox_src[0]
+    bbox[3] += bbox_src[1]
+    np.save( pj(hls_dir, g_hlstb_stub % (bbox[0], bbox[1], bbox[2], bbox[3])),
+            tb_chips )
+    
 
 def get_cdl_chip(cdl_file, bbox):
     cdl = np.load(cdl_file)
@@ -36,6 +60,7 @@ def get_hls_chips(hls_dir, bbox_src, bbox=None):
     if bbox is None:
         bbox = bbox_src
     hls_4d = []
+    print("Loading original hls images...")
     for b in range(1, g_num_spectral+1):
         band = []
         for i,t in enumerate( range(g_time_start_idx, g_time_end_idx) ):
@@ -46,13 +71,17 @@ def get_hls_chips(hls_dir, bbox_src, bbox=None):
             band.append(hls_chip)
         hls_4d.append( np.array(band) )
     hls_4d = np.array(hls_4d)
+    print("...Done")
 
+    # For a 1000x1000 source image, hls_4d.shape is [19, 19, 1000, 1000],
+    # [ band, time, ht, wd ]
+    print("Normalizing band data...")
     for b in range(g_num_spectral):
-        band = hls_4d[:,:,b,:]
-        band[:,:,:] = (band - np.min(band)) / (np.max(band) - np.min(band))
-#        hls_4d[:,:,:,b] = band
-#    hls_4d = hls_4d.astype(np.uint8)
+        band = hls_4d[b,:,:,:]
+        band[:,:,:] = _map_to_uniform(band)
+    print("...Done")
 
+    print("Creating time-band chips...")
     tb_chips = []
     bbox_ht = bbox[2] - bbox[0]
     bbox_wd = bbox[3] - bbox[1]
@@ -60,11 +89,21 @@ def get_hls_chips(hls_dir, bbox_src, bbox=None):
         tb_chips_i = []
         for j in range(bbox_wd):
             tb_chip_ij = hls_4d[:, :, i, j]
-            tb_chips_i.append( tuple( np.squeeze(tb_chip_ij) ) )
+            tb_chips_i.append( np.squeeze(tb_chip_ij) )
         tb_chips.append(tb_chips_i)
-            
-    return np.array(tb_chips)
-            
+    tb_chips = np.array(tb_chips)
+    _save_tb_chips(hls_dir, tb_chips, bbox_src, bbox)
+    print("...Done")
+    
+    # For a 1000x1000 bounding box, tb_chips.shape is [1000, 1000, 19, 19],
+    # [ ht, wd, band, time ]
+    return tb_chips
+    
+def load_tb_chips(tbchips_dir, bbox):
+    tb_chips = np.load( pj(tbchips_dir, g_hlstb_stub % (bbox[0], bbox[1], 
+        bbox[2], bbox[3]))) 
+    return tb_chips
+
 def make_figure(output_dir, cdl_chip, tb_chips):
     plt.figure(figsize=(22,10))
     nrows,chip_cols = cdl_chip.shape
@@ -97,8 +136,12 @@ def main(args):
     bbox_src = get_chip_bbox(args.src_image_x, args.src_image_y, 
             args.src_image_size)
     cdl_chip = get_cdl_chip(args.ground_truth_file, bbox)
-    tb_chips = get_hls_chips(args.hls_dir, bbox_src, bbox)
-    make_figure(args.output_dir, cdl_chip, tb_chips)
+    if args.saved_tbchips_dir is None:
+        tb_chips = get_hls_chips(args.hls_dir, bbox_src, bbox)
+    else:
+        tb_chips = load_tb_chips(args.saved_tbchips_dir, bbox_src, bbox)
+    if args.make_figure:
+        make_figure(args.output_dir, cdl_chip, tb_chips)
 
 
 if __name__ == "__main__":
@@ -111,15 +154,20 @@ if __name__ == "__main__":
             default=pj(HOME, "Datasets/HLS/test_imgs/hls"))
     parser.add_argument("-o", "--output-dir", type=str,
             default=pj(HOME, "Training/cropnet/test_samples"))
+    parser.add_argument("--saved-tbchips-dir", type=str, default=None,
+            help="If set, algorithm will not construct and save chips but " \
+                    "rather will load them from this directory")
+    parser.add_argument("-F", "--no-figure", dest="make_figure",
+            action="store_false")
     parser.add_argument("-x", "--chip-x", type=int, default=0,
             help="Chip top coordinate")
     parser.add_argument("-y", "--chip-y", type=int, default=0,
             help="Chip left coordinate")
     parser.add_argument("--chip-size", type=int, default=20)
     parser.add_argument("--src-image-x", type=int, default=0,
-            help="Source chip top coordinate")
+            help="Source image top coordinate")
     parser.add_argument("--src-image-y", type=int, default=0,
-            help="Source chip left coordinate")
+            help="Source image left coordinate")
     parser.add_argument("--src-image-size", type=int, default=500)
     args = parser.parse_args()
     main(args)
