@@ -38,6 +38,10 @@ class CropNetFCAE(nn.Module):
         out = self._decode(z)
         return out,mu,logvar
 
+    def get_features(self, x):
+        mu,_ = self._encode(x)
+        return mu
+
     def get_input_size(self): # TODO Create a base class with this method, 
             # put in pyt_utils/modelbase.py
         return self._chip_size

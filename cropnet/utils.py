@@ -5,6 +5,7 @@ Some utilities for the visualization scripts
 import gdal
 import numpy as np
 import os
+import re
 import shutil
 
 pe = os.path.exists
@@ -16,6 +17,32 @@ g_num_spectral = 19
 g_time_start_idx = 7
 g_time_end_idx = 26
 
+
+# Input: file name that has exactly one substring of the form _<n>_<n>_<n>_<n>,
+# corresponding to a [x0, y0, x1, y1] bounding box.
+def get_bbox_from_file_name(file_name):
+    file_name = os.path.basename(file_name)
+    match = re.search(r"_\d+_\d+_\d+_\d+", file_name)
+    if match is None:
+        raise RuntimeError("Incorrect format of file name %s, must contain " \
+                "substring of form _<n>_<n>_<n>_<n>" % (file_name))
+    span = match.span(0)
+    rematch = re.search(r"_\d+_\d+_\d+_\d+", file_name[ span[0]+1 : ])
+    if rematch is not None:
+        raise RuntimeError("Incorrect format of file name %s, substring of " \
+                "form _<n>_<n>_<n>_<n> must be unique" % (file_name))
+    bbox_str = file_name[ span[0] : span[1] ][1:]
+    uscore = bbox_str.find("_")
+    x0 = int( bbox_str[0 : uscore] )
+    bbox_str = bbox_str[uscore+1:]
+    uscore = bbox_str.find("_")
+    y0 = int( bbox_str[0 : uscore] )
+    bbox_str = bbox_str[uscore+1:]
+    uscore = bbox_str.find("_")
+    x1 = int( bbox_str[0 : uscore] )
+    bbox_str = bbox_str[uscore+1:]
+    y1 = int(bbox_str)
+    return x0,y0,x1,y1
 
 def get_cdl_subregion(img_path, bbox):
     img = gdal.Open(img_path)

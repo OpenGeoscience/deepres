@@ -27,16 +27,21 @@ HOME = os.path.expanduser("~")
 
 # Time-Band Chips, where Band is spectral band
 class TBChips(Dataset):
-    def __init__(self, data_dir, src_image_x=0, src_image_y=0, 
+    def __init__(self, data_dir_or_file, src_image_x=0, src_image_y=0, 
             src_image_size=500):
-        self._data_dir = data_dir
+        self._data_dir = None
+        self._data_npy_file = None
         self._N = None
         self._src_image_x = src_image_x
         self._src_image_y = src_image_y
         self._src_image_size = src_image_size
         self._tb_chips = None # We're going to hold these in memory for now
 
-        self._get_tb_chips()
+        if os.path.isdir(data_dir_or_file):
+            self._data_dir = data_dir_or_file
+            self._get_tb_chips()
+        else:
+            self._load_tb_chips_from_npy(data_dir_or_file)
 
     def __getitem__(self, index):
         i = index // self._src_image_size
@@ -48,8 +53,21 @@ class TBChips(Dataset):
     def __len__(self):
         return self._N
 
+    def get_data(self):
+        return self._tb_chips
+
     def _get_tb_chips(self):
         src_bbox = get_chip_bbox(self._src_image_x, self._src_image_y, 
                 self._src_image_size)
         self._tb_chips = load_tb_chips(self._data_dir, src_bbox)
+        # TODO load_tb_chips does virtually exactly what the version here does, 
+        # just loads teh npy file directly.  Doesn't create it
         self._N = self._tb_chips.shape[0] * self._tb_chips.shape[1]
+
+    def _load_tb_chips_from_npy(self, data_file):
+        full_tb_chips = np.load(data_file)
+        x0,y0 = self._src_image_x,self._src_image_y
+        x1,y1 = x0+self._src_image_size,y0+self._src_image_size
+        self._tb_chips = full_tb_chips[y0:y1, x0:x1]
+        self._N = self._tb_chips.shape[0] * self._tb_chips.shape[1]
+
