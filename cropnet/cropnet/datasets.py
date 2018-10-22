@@ -56,6 +56,11 @@ class TBChips(Dataset):
     def get_data(self):
         return self._tb_chips
 
+    def get_image_bbox(self):
+        x0,y0 = self._src_image_x,self._src_image_y
+        x1,y1 = x0+self._src_image_size,y0+self._src_image_size
+        return (x0,y0,x1,y1)
+
     def _get_tb_chips(self):
         src_bbox = get_chip_bbox(self._src_image_x, self._src_image_y, 
                 self._src_image_size)
@@ -66,8 +71,7 @@ class TBChips(Dataset):
 
     def _load_tb_chips_from_npy(self, data_file):
         full_tb_chips = np.load(data_file)
-        x0,y0 = self._src_image_x,self._src_image_y
-        x1,y1 = x0+self._src_image_size,y0+self._src_image_size
+        x0,y0,x1,y1 = self.get_image_bbox()
         self._tb_chips = full_tb_chips[y0:y1, x0:x1]
         self._N = self._tb_chips.shape[0] * self._tb_chips.shape[1]
 

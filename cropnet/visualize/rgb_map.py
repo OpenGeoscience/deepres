@@ -14,16 +14,21 @@ import os
 import shutil
 import torch
 
-from cropnet.datasets import TBChips
-from cropnet.models import CropNetFCAE
-from location_image import get_cdl_chip
-from pyt_utils.encoder import compute_features
+# pytorch imports
 from torch.utils.data import DataLoader
-from utils import get_chip_bbox, get_bbox_from_file_name, get_cdl_subregion
+
+# ml_utils imports
+
+# project imports
+from cropnet.datasets import TBChips
+from location_image import get_cdl_chip
+from utils import get_chip_bbox, get_features, get_bbox_from_file_name, \
+        get_cdl_subregion, load_model
 
 pe = os.path.exists
 pj = os.path.join
 HOME = os.path.expanduser("~")
+
 
 g_red_idx = 3
 g_green_idx = 2
@@ -41,24 +46,6 @@ def get_data_loader(file_name, bbox):
             shuffle=False,
             num_workers=8)
     return data_loader,tb_chips
-
-def get_features(model, data_loader, bbox):
-    print("Computing features...")
-    features,_ = compute_features(model, data_loader, make_chip_list=False)
-    print("...Done")
-    size_x,size_y = bbox[2]-bbox[0],bbox[3]-bbox[1]
-    num_chans = features.shape[1]
-    features = features.reshape((size_y,size_x,num_chans))
-    return features
-
-def get_model(model_path, model_name):
-    if model_name=="CropNetFCAE":
-        model = CropNetFCAE(chip_size=19, bneck_size=3) # TODO
-    else:
-        raise RuntimeError("Model %s not recognized" % (model_name))
-    model.load_state_dict( torch.load(model_path) )
-    model = model.cuda().eval()
-    return model
 
 def get_rgb(tb_chips):
     data = tb_chips.get_data()
@@ -111,7 +98,8 @@ def main(args):
             args.subregion_x + args.subregion_size,
             args.subregion_y + args.subregion_size]
     data_loader,tb_chips = get_data_loader(args.data_npy_file, bbox)
-    model = get_model(args.model_path, args.model_name)
+    model = load_model(args.model_path, args.model_name, chip_size=19,
+            bneck_size=3)
 
     rgb = get_rgb(tb_chips)
     features = get_features(model, data_loader, bbox)

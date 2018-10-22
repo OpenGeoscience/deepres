@@ -7,6 +7,9 @@ import numpy as np
 import os
 import re
 import shutil
+import torch
+
+from cropnet.models import CropNetFCAE
 
 pe = os.path.exists
 pj = os.path.join
@@ -53,6 +56,15 @@ def get_cdl_subregion(img_path, bbox):
 def get_chip_bbox(chip_x, chip_y, chip_size):
     return (chip_x, chip_y, chip_x+chip_size, chip_y+chip_size)
 
+def get_features(model, data_loader, bbox=None):
+    features,_ = compute_features(model, data_loader, make_chip_list=False)
+    if bbox is None:
+        bbox = data_loader.dataset.get_image_bbox()
+    size_x,size_y = bbox[2]-bbox[0],bbox[3]-bbox[1]
+    num_chans = features.shape[1]
+    features = features.reshape((size_y,size_x,num_chans))
+    return features
+
 def get_hls_subregions_all(hls_dir, bbox, saver=None):
     timepts_at_band = []
     for b in range(1,g_num_spectral+1):
@@ -95,4 +107,16 @@ def get_hls_subregions_by_band(band, hls_dir, bbox, saver=None):
         else:
             saver(region, t)
     return regions
+
+def load_model(model_path, model_name, is_train=False, **kwargs):
+    if model_name=="CropNetFCAE":
+        model = CropNetFCAE(**kwargs)
+    else:
+        raise RuntimeError("Model %s not recognized" % (model_name))
+    model.load_state_dict( torch.load(model_path) )
+    if is_train:
+        model = model.cuda().train()
+    else:
+        model = model.cuda().eval()
+    return model
 
