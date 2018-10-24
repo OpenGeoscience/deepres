@@ -11,9 +11,16 @@ import torchvision as tv
 
 from collections import OrderedDict
 from PIL import Image
+from skimage.transform import resize
+
+# pytorch imports
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
-from visualize.location_image import get_chip_bbox, load_tb_chips
+
+# ml_utils imports
+
+# local imports
+from utils import get_chip_bbox, load_tb_chips
 
 
 logging.getLogger("PIL").setLevel(logging.WARNING)
@@ -23,6 +30,66 @@ logging.getLogger("PIL.Image").setLevel(logging.WARNING)
 pe = os.path.exists
 pj = os.path.join
 HOME = os.path.expanduser("~")
+
+
+# 224x224 patches to feed into pre-trained ResNet, classify center pixel
+class RGBPatches(Dataset):
+    def __init__(self, data_dir_or_file, labels_dir_or_file, upsample=2, 
+            ingest_patch_size=224):
+        self._data_dir = None
+        self._data_img = None
+        self._img_ht = None
+        self._img_wd = None
+        self._ingest_patch_size = ingest_patch_size
+        self._labels_dir = None
+        self._labels_img = None
+        self._pad = None
+        self._upsample = upsample
+
+        if os.path.isdir(data_dir_or_file):
+            self._data_dir = data_dir_or_file
+            raise NotImplementedError()
+        else:
+            self._load_rgb(data_dir_or_file)
+
+        if os.path.isdir(labels_dir_or_file):
+            self._data_dir = labels_dir_or_file
+            raise NotImplementedError()
+        else:
+            self._load_labels(labels_dir_or_file)
+
+        self._pad = self._ingest_patch_size // self._upsample
+
+    def __getitem__(self, index):
+        i = self._pad + index % self._img_ht  # Column major
+        j = self._pad + index // self._img_ht
+        i_beg = i - self._pad
+        i_end = i + self._pad
+        j_beg = j - self._pad
+        j_end = j + self._pad
+        raw_patch = self._data_img[i_beg:i_end, j_beg:j_end]
+        patch = cv2.resize(raw_patch, (ingest_patch_size,ingest_patch_size),
+                interpolation=cv2.INTER_CUBIC)
+        label = self._labels_img[i_beg][j_beg]
+        return patch,label
+
+    def __len__(self):
+        return self._img_ht * self._img_wd
+
+    def _load_labels(self, data_npy_file):
+        self._labels_img = np.load(data_npy_file)
+        if self._labels_img is None:
+            raise RuntimeError("Image file %s does not exist or is not a valid"\
+                    " image")
+
+    def _load_rgb(self, data_npy_file):
+        self._data_img = np.load(data_npy_file)
+        if self._data_img is None:
+            raise RuntimeError("Image file %s does not exist or is not a valid"\
+                    " image")
+        self._img_ht,self._img_wd = self._data_img.shape[:2]
+        pad_shape = ((self._pad, self._pad), (self._pad, self._pad), (0,0))
+        self._data_img = np.pad(self._data_img/256, pad_shape, mode="reflect")
 
 
 # Time-Band Chips, where Band is spectral band

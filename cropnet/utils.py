@@ -1,5 +1,5 @@
 """
-Some utilities for the visualization scripts
+Some utilities for cropnet
 """
 
 import gdal
@@ -9,8 +9,6 @@ import re
 import shutil
 import torch
 
-from cropnet.models import CropNetFCAE
-
 pe = os.path.exists
 pj = os.path.join
 HOME = os.path.expanduser("~")
@@ -19,6 +17,7 @@ HOME = os.path.expanduser("~")
 g_num_spectral = 19
 g_time_start_idx = 7
 g_time_end_idx = 26
+g_hlstb_stub = "hls_tb_ark_%d_%d_%d_%d.npy" # TODO "ark"
 
 
 # Input: file name that has exactly one substring of the form _<n>_<n>_<n>_<n>,
@@ -108,15 +107,18 @@ def get_hls_subregions_by_band(band, hls_dir, bbox, saver=None):
             saver(region, t)
     return regions
 
-def load_model(model_path, model_name, is_train=False, **kwargs):
-    if model_name=="CropNetFCAE":
-        model = CropNetFCAE(**kwargs)
-    else:
-        raise RuntimeError("Model %s not recognized" % (model_name))
-    model.load_state_dict( torch.load(model_path) )
-    if is_train:
-        model = model.cuda().train()
-    else:
-        model = model.cuda().eval()
-    return model
+def load_tb_chips(tbchips_dir, bbox):
+    tb_chips = np.load( pj(tbchips_dir, g_hlstb_stub % (bbox[0], bbox[1],
+        bbox[2], bbox[3])))
+    return tb_chips
+
+def _save_tb_chips(hls_dir, tb_chips, bbox_src, bbox):
+    bbox = list(bbox)
+    bbox[0] += bbox_src[0]
+    bbox[1] += bbox_src[1]
+    bbox[2] += bbox_src[0]
+    bbox[3] += bbox_src[1]
+    np.save( pj(hls_dir, g_hlstb_stub % (bbox[0], bbox[1], bbox[2], bbox[3])),
+            tb_chips )
+
 

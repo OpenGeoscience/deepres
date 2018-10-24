@@ -12,7 +12,7 @@ import matplotlib.gridspec as gridspec
 import os
 import shutil
 
-from utils import get_chip_bbox
+from utils import get_chip_bbox, load_tb_chips, save_tb_chips
 
 pe = os.path.exists
 pj = os.path.join
@@ -23,7 +23,6 @@ g_num_spectral = 19
 g_time_start_idx = 7
 g_time_end_idx = 26
 g_hls_stub = "hls_cls_ark_time%d_band%d_%d_%d_%d_%d.npy" # TODO "ark"
-g_hlstb_stub = "hls_tb_ark_%d_%d_%d_%d.npy" # TODO "ark"
 
 
 def _map_to_uniform(band):
@@ -39,15 +38,6 @@ def _map_to_uniform(band):
     u_band = su.reshape(*band_shape)
     return u_band
 
-def _save_tb_chips(hls_dir, tb_chips, bbox_src, bbox):
-    bbox = list(bbox)
-    bbox[0] += bbox_src[0]
-    bbox[1] += bbox_src[1]
-    bbox[2] += bbox_src[0]
-    bbox[3] += bbox_src[1]
-    np.save( pj(hls_dir, g_hlstb_stub % (bbox[0], bbox[1], bbox[2], bbox[3])),
-            tb_chips )
-    
 
 def get_cdl_chip(cdl_file, bbox):
     cdl = np.load(cdl_file)
@@ -99,11 +89,6 @@ def get_hls_chips(hls_dir, bbox_src, bbox=None):
     # [ ht, wd, band, time ]
     return tb_chips
     
-def load_tb_chips(tbchips_dir, bbox):
-    tb_chips = np.load( pj(tbchips_dir, g_hlstb_stub % (bbox[0], bbox[1], 
-        bbox[2], bbox[3]))) 
-    return tb_chips
-
 def make_figure(output_dir, cdl_chip, tb_chips):
     plt.figure(figsize=(22,10))
     nrows,chip_cols = cdl_chip.shape

@@ -22,9 +22,10 @@ from torchvision.utils import save_image
 from pyt_utils.trainer import TrainerBase, create_session_dir, ae_sampler
 
 # Local imports
-from datasets import TBChips
-from models import CropNetFCAE
-from utils import get_features, load_model
+from datasets import RGBPatches, TBChips
+from ae_model import CropNetFCAE, load_ae_model
+from seg_model import CropSeg, Pretrained
+from utils import get_features
 
 pe = os.path.exists
 pj = os.path.join
@@ -49,12 +50,21 @@ def batch_writer(trainer, epoch, batch_idx, batch_len, losses):
         fp.write(s)
         fp.flush
 
+def get_cats(cdl_file_path):
+    cdl = np.load(cdl_file_path)
+    THRESH = 0.05 # TODO
+    cats = []
+    for i in range(0, 256):
+        if np.sum(i==cdl) / cdl.size > 0.05:
+            cats.append(i)
+    return cats
+
 def get_data_loader(data_dir, image_x, image_y, image_size, batch_size):
     dataset = TBChips(data_dir, image_x, image_y, image_size)
     train_loader = DataLoader(dataset=dataset,
                                   batch_size=batch_size,
                                   shuffle=True,
-                                  num_workers=0) # TODO
+                                  num_workers=8)
     return train_loader # TODO test loader!!
 
 def get_optimizer(model, opt_name, lr):
@@ -65,6 +75,15 @@ def get_optimizer(model, opt_name, lr):
     else:
         raise RuntimeError("Unrecognized optimizer, %s" % (opt_name))
     return optimizer
+
+def get_seg_loader(features, cdl_file_path, batch_size):
+    dataset = RGBPatches(features, cdl_file_path)
+    train_loader = DataLoader(dataset=dataset,
+                                batch_size=batch_size,
+                                shuffle=True,
+                                num_workers=8)
+    return train_loader # TODO test loader
+
 
 # Reconstruction + KL divergence losses summed over all elements and batch
 def loss_function(model_output, x, chip_size):
@@ -89,20 +108,28 @@ def make_ae_model(ae_network, chip_size, bneck_size):
         raise RuntimeError("Unrecognized network %s" % (ae_network))
     return model.cuda()
 
+def make_seg_model(seg_network, **kwargs):
+    if seg_network == "Pretrained":
+        model = Pretrained(**kwargs)
+    elif seg_network == "CropSeg":
+        raise NotImplementedError()
+    else:
+        raise RuntimeError("Model %s not recognized" % (seg_network))
+    return model.cuda().eval()
 
 def main(args):
     session_dir = create_session_dir(args.output_supdir)
-    test_loader = None
+    test_ae_loader = None
     ae_model = None
-    if args.ae_model is None:
-        train_loader = get_data_loader(args.data_dir, args.src_image_x, 
+    if args.ae_model_path is None:
+        train_ae_loader = get_data_loader(args.data_dir, args.src_image_x, 
                 args.src_image_y, args.src_image_size, args.batch_size)
-        test_loader = train_loader
+        test_ae_loader = train_ae_loader
         ae_model = make_ae_model(args.network, 19, 3) # TODO
         opt_getter = lambda lr : get_optimizer(ae_model, args.opt_name, lr)
         criterion = lambda output,x : loss_function(output, x, 19) # TODO
         ae_trainer = TrainerBase(ae_model,
-                (train_loader, None),
+                (train_ae_loader, None),
                 opt_getter=opt_getter,
                 criterion=criterion,
                 session_dir=session_dir,
@@ -110,16 +137,30 @@ def main(args):
                 batch_writer=batch_writer
                 )
         ae_trainer.train()
-    seg_model = make_seg_model(args.network, 256) # TODO
+
+    cats = get_cats(args.cdl_file_path)
+    num_cats = len(cats)
+    print("Number of land cover categories above threshold: %d" % num_cats)
+    seg_model = make_seg_model("Pretrained", model_name="resnet18", 
+            num_cats=num_cats) # TODO
     if ae_model is None:
         ae_model = load_ae_model(args.ae_model_path, args.network, chip_size=19,
                 bneck_size=3) # TODO
-    if test_loader is None:
-        test_loader = get_data_loader(args.data_dir, args.src_image_x, 
+    if test_ae_loader is None:
+        test_ae_loader = get_data_loader(args.data_dir, args.src_image_x, 
                 args.src_image_y, args.src_image_size, args.batch_size)
-    features = get_features(ae_model, test_loader) # TODO this should operate 
+    features = get_features(ae_model, test_ae_loader) # TODO this should operate 
         # over an entire directory
-    
+    train_seg_loader = get_seg_loader(features, args.cdl_file_path,
+            args.batch_size)
+    opt_getter = lambda lr : get_optimizer(ae_model, args.opt_name, lr)
+    criterion = nn.CrossEntropyLoss
+    seg_trainer = TrainerBase(seg_model,
+            (train_seg_loader, None),
+            opt_getter=opt_getter,
+            criterion=criterion,
+            session_dir=session_dir)
+    seg_trainer.train()      
 
 
 if __name__ == "__main__":
@@ -130,15 +171,19 @@ if __name__ == "__main__":
                     " be retrained from scratch")
     parser.add_argument("-d", "--data-dir", type=str,
             default=pj(HOME, "Datasets/HLS/test_imgs/hls"))
+    parser.add_argument("--cdl-file-path", type=str,
+            default=pj(HOME, "Datasets/HLS/test_imgs/cdl/" \
+                    "cdl_2016_neAR_0_0_500_500.npy")) # TODO
     parser.add_argument("-o", "--output-supdir", type=str,
             default=pj(HOME, "Training/cropnet/sessions"))
+
     parser.add_argument("--src-image-x", type=int, default=0,
             help="Source chip top coordinate")
     parser.add_argument("--src-image-y", type=int, default=0,
             help="Source chip left coordinate")
     parser.add_argument("--src-image-size", type=int, default=500)
     parser.add_argument("--network", type=str, default="CropNetFCAE",
-            choices=["CropNetFCAE", "CropSeg"])
+            choices=["CropNetFCAE", "CropSeg", "Pretrained"])
 
     parser.add_argument("--opt-name", type=str, default="Adam",
             choices=["Adam", "SGD"])

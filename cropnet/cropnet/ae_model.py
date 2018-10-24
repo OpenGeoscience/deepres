@@ -14,6 +14,17 @@ from torch.nn.parameter import Parameter
 
 g_DEBUG = False
 
+def load_ae_model(model_path, model_name, is_train=False, **kwargs):
+    if model_name=="CropNetFCAE":
+        model = CropNetFCAE(**kwargs)
+    else:
+        raise RuntimeError("Model %s not recognized" % (model_name))
+    model.load_state_dict( torch.load(model_path) )
+    if is_train:
+        model = model.cuda().train()
+    else:
+        model = model.cuda().eval()
+    return model
 
 class CropNetFCAE(nn.Module):
     def __init__(self, chip_size=19, bneck_size=3):
