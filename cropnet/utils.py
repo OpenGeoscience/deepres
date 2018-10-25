@@ -9,6 +9,8 @@ import re
 import shutil
 import torch
 
+from collections import OrderedDict
+
 # ml_utils imports
 from pyt_utils.encoder import compute_features
 
@@ -114,6 +116,37 @@ def load_tb_chips(tbchips_dir, bbox):
     tb_chips = np.load( pj(tbchips_dir, g_hlstb_stub % (bbox[0], bbox[1],
         bbox[2], bbox[3])))
     return tb_chips
+
+# Obviously, this is tied very closely to the specific format of this file
+def make_clut(file_path=pj(HOME, 
+    "Repos/OpenGeoscience/deepres/2016_cdl_color.txt")):
+    color_dict = OrderedDict()
+    reading_cat_vals = True
+    with open(file_path) as fp:
+        next(fp)
+        for line in fp:
+            line = line.strip()
+            if len(line) == 0:
+                reading_cat_vals = False
+                continue
+            if reading_cat_vals:
+                cat = int( line[ : line.index(":") ] )
+                rgb = line[ line.index(":")+2 : ]
+                rgb = [int(x) for x in rgb.split(",")][:3]
+                color_dict[cat] = OrderedDict()
+                color_dict[cat]["rgb"] = rgb
+            else:
+                if "index=" in line:
+                    beg = line.index("index=") + len("index=") + 1
+                    end = line.index(">") - 1
+                    cat = int( line[beg:end] )
+                    next(fp)
+                    line2=next(fp)
+                    beg = line2.index(">") + 1
+                    end = line2.index("<", beg)
+                    name = line2[beg:end]
+                    color_dict[cat]["name"] = name
+    return color_dict
 
 def save_tb_chips(hls_dir, tb_chips, bbox_src, bbox):
     bbox = list(bbox)
