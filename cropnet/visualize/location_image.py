@@ -82,7 +82,7 @@ def get_hls_chips(hls_dir, bbox_src, bbox=None):
             tb_chips_i.append( np.squeeze(tb_chip_ij) )
         tb_chips.append(tb_chips_i)
     tb_chips = np.array(tb_chips)
-    _save_tb_chips(hls_dir, tb_chips, bbox_src, bbox)
+    save_tb_chips(hls_dir, tb_chips, bbox_src, bbox)
     print("...Done")
     
     # For a 1000x1000 bounding box, tb_chips.shape is [1000, 1000, 19, 19],

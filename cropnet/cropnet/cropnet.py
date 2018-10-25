@@ -9,6 +9,7 @@ import numpy as np
 import os
 import shutil
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 
 from collections import OrderedDict
@@ -76,8 +77,8 @@ def get_optimizer(model, opt_name, lr):
         raise RuntimeError("Unrecognized optimizer, %s" % (opt_name))
     return optimizer
 
-def get_seg_loader(features, cdl_file_path, batch_size):
-    dataset = RGBPatches(features, cdl_file_path)
+def get_seg_loader(feats_file_path, cdl_file_path, batch_size):
+    dataset = RGBPatches(feats_file_path, cdl_file_path)
     train_loader = DataLoader(dataset=dataset,
                                 batch_size=batch_size,
                                 shuffle=True,
@@ -151,7 +152,9 @@ def main(args):
                 args.src_image_y, args.src_image_size, args.batch_size)
     features = get_features(ae_model, test_ae_loader) # TODO this should operate 
         # over an entire directory
-    train_seg_loader = get_seg_loader(features, args.cdl_file_path,
+    feats_path = pj(session_dir, "feats.npy")
+    np.save(feats_path, features)
+    train_seg_loader = get_seg_loader(feats_path, args.cdl_file_path,
             args.batch_size)
     opt_getter = lambda lr : get_optimizer(ae_model, args.opt_name, lr)
     criterion = nn.CrossEntropyLoss
@@ -181,7 +184,7 @@ if __name__ == "__main__":
             help="Source chip top coordinate")
     parser.add_argument("--src-image-y", type=int, default=0,
             help="Source chip left coordinate")
-    parser.add_argument("--src-image-size", type=int, default=500)
+    parser.add_argument("--src-image-size", type=int, default=1000)
     parser.add_argument("--network", type=str, default="CropNetFCAE",
             choices=["CropNetFCAE", "CropSeg", "Pretrained"])
 

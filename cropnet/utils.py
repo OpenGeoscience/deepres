@@ -9,6 +9,9 @@ import re
 import shutil
 import torch
 
+# ml_utils imports
+from pyt_utils.encoder import compute_features
+
 pe = os.path.exists
 pj = os.path.join
 HOME = os.path.expanduser("~")
@@ -112,7 +115,7 @@ def load_tb_chips(tbchips_dir, bbox):
         bbox[2], bbox[3])))
     return tb_chips
 
-def _save_tb_chips(hls_dir, tb_chips, bbox_src, bbox):
+def save_tb_chips(hls_dir, tb_chips, bbox_src, bbox):
     bbox = list(bbox)
     bbox[0] += bbox_src[0]
     bbox[1] += bbox_src[1]

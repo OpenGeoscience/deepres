@@ -3,6 +3,7 @@ Datasets for cropnet
 """
 
 import csv
+import cv2
 import logging
 import numpy as np
 import os
@@ -46,6 +47,8 @@ class RGBPatches(Dataset):
         self._pad = None
         self._upsample = upsample
 
+        self._pad = self._ingest_patch_size // self._upsample
+
         if os.path.isdir(data_dir_or_file):
             self._data_dir = data_dir_or_file
             raise NotImplementedError()
@@ -58,7 +61,7 @@ class RGBPatches(Dataset):
         else:
             self._load_labels(labels_dir_or_file)
 
-        self._pad = self._ingest_patch_size // self._upsample
+        self._check_dims()
 
     def __getitem__(self, index):
         i = self._pad + index % self._img_ht  # Column major
@@ -68,13 +71,21 @@ class RGBPatches(Dataset):
         j_beg = j - self._pad
         j_end = j + self._pad
         raw_patch = self._data_img[i_beg:i_end, j_beg:j_end]
-        patch = cv2.resize(raw_patch, (ingest_patch_size,ingest_patch_size),
-                interpolation=cv2.INTER_CUBIC)
+        resize_dims = (self._ingest_patch_size, self._ingest_patch_size)
+        patch = cv2.resize(raw_patch,resize_dims,interpolation=cv2.INTER_CUBIC)
         label = self._labels_img[i_beg][j_beg]
         return patch,label
 
     def __len__(self):
         return self._img_ht * self._img_wd
+
+    def _check_dims(self):
+        label_h,label_w = self._labels_img.shape[:2]
+        h,w = self._data_img.shape[:2]
+        if label_h+2*self._pad != h or label_w+2*self._pad != w:
+            raise RuntimeError("Inconsistent data, label matrices; (%d, %d) " \
+                    "with total padding=%d vs. (%d, %d)." \
+                    % (h, w, 2*self._pad, label_h, label_w))
 
     def _load_labels(self, data_npy_file):
         self._labels_img = np.load(data_npy_file)
