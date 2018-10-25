@@ -23,15 +23,10 @@ g_time_end_idx = 26
 g_hls_stub = "hls_cls_ark_time%d_band%d_%d_%d_%d_%d.npy" # TODO "ark"
 
 def _hls_saver(region, path_stub, t, b, bbox):
-    print("_hls_saver 1")
     path_stub = path_stub % (t, b, bbox[0], bbox[1], bbox[2], bbox[3])
-    print("_hls_saver 2")
     img_path_png = path_stub + ".png"
-    print("_hls_saver 3")
     img_path_npy = path_stub + ".npy"
-    print("_hls_saver 4")
     cv2.imwrite(img_path_png, region)
-    print("_hls_saver 5")
     np.save(img_path_npy, region)
     print("Saved %s and %s to disk" % (img_path_png, img_path_npy))
     
