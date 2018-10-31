@@ -26,7 +26,7 @@ from cropnet.datasets import TBChips
 from cropnet.ae_model import load_ae_model
 from location_image import get_cdl_chip
 from utils import get_chip_bbox, get_features, get_bbox_from_file_name, \
-        get_cdl_subregion, make_clut
+        get_cdl_subregion, make_clut, transform_cdl
 
 pe = os.path.exists
 pj = os.path.join
@@ -50,15 +50,6 @@ def get_data_loader(file_name, bbox):
             num_workers=8)
     return data_loader,tb_chips
 
-def get_cat_dict(cdl):
-    clut = make_clut()
-    THRESH = 0.05 # TODO
-    cat_dict = OrderedDict()
-    for i in range(256):
-        if np.sum(i==cdl) / cdl.size > THRESH:
-            cat_dict[i] = clut[i]
-    return cat_dict
-    
 
 def get_rgb(tb_chips):
     data = tb_chips.get_data()
@@ -73,19 +64,6 @@ def normalize_feats(features):
         c = features[:,:,k]
         features[:,:,k] = (c - np.min(c)) / (np.max(c) - np.min(c))
     return features
-
-def transform_cdl(cdl):
-    cat_dict = get_cat_dict(cdl)
-    keys = list(cat_dict.keys())
-    h,w = cdl.shape[:2]
-    cdl_rgb = np.zeros((h,w,3))
-    for i in range(256):
-        if i in keys:
-            cdl_rgb[ cdl==i, : ] = np.array( cat_dict[i]["rgb"] )
-        else:
-            cdl_rgb[ cdl==i, : ] = np.zeros(3)
-    cdl_rgb /= 256.0
-    return cdl_rgb,cat_dict
 
 def write_cats_and_features(rgb, features, cdl, cat_dict):
     nrows = 4
@@ -114,7 +92,7 @@ def write_cats_and_features(rgb, features, cdl, cat_dict):
         rgb = np.array(cat_dict[k]["rgb"]) / 256.0
         name = cat_dict[k]["name"]
         plt.scatter([10], [10], c=np.array([rgb]), label=name)
-    ax3.imshow(cdl, cmap=plt.cm.gray)
+    ax3.imshow(cdl)
     ax3.get_xaxis().set_visible(False)
     ax3.get_yaxis().set_visible(False)
     ax3.autoscale("off")

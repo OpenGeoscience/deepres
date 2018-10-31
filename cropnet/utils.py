@@ -19,6 +19,7 @@ pj = os.path.join
 HOME = os.path.expanduser("~")
 
 
+g_cat_pct_thresh = 0.05 # Pct in image to get recognized in legend
 g_num_spectral = 19
 g_time_start_idx = 7
 g_time_end_idx = 26
@@ -50,6 +51,14 @@ def get_bbox_from_file_name(file_name):
     bbox_str = bbox_str[uscore+1:]
     y1 = int(bbox_str)
     return x0,y0,x1,y1
+
+def get_cat_dict(cdl):
+    clut = make_clut()
+    cat_dict = OrderedDict()
+    for i in range(256):
+        if np.sum(i==cdl) / cdl.size > g_cat_pct_thresh:
+            cat_dict[i] = clut[i]
+    return cat_dict
 
 def get_cdl_subregion(img_path, bbox):
     img = gdal.Open(img_path)
@@ -101,7 +110,7 @@ def get_hls_subregions_by_band(band, hls_dir, bbox, saver=None):
     regions = []
     img = gdal.Open(path)
     if img is None:
-        raise RuntimeError("Tmage %s not found" % (path))
+        raise RuntimeError("Image %s not found" % (path))
     for t in range(g_time_start_idx, g_time_end_idx):
         layer = img.GetRasterBand(t)
         region = layer.ReadAsArray()
@@ -112,9 +121,14 @@ def get_hls_subregions_by_band(band, hls_dir, bbox, saver=None):
             saver(region, t)
     return regions
 
-def load_tb_chips(tbchips_dir, bbox):
-    tb_chips = np.load( pj(tbchips_dir, g_hlstb_stub % (bbox[0], bbox[1],
-        bbox[2], bbox[3])))
+def load_tb_chips(tbchips_dir, bbox_src, bbox=None):
+    tb_chips = np.load( pj(tbchips_dir, g_hlstb_stub % (bbox_src[0],
+        bbox_src[1], bbox_src[2], bbox_src[3])))
+    if bbox is None:
+        bbox = np.zeros(4, np.int)
+        bbox[2] = bbox_src[2] - bbox_src[0]
+        bbox[3] = bbox_src[3] - bbox_src[1]
+    tb_chips = tb_chips[:, :, bbox[0]:bbox[2], bbox[1]:bbox[3]]
     return tb_chips
 
 # Obviously, this is tied very closely to the specific format of this file
@@ -156,5 +170,19 @@ def save_tb_chips(hls_dir, tb_chips, bbox_src, bbox):
     bbox[3] += bbox_src[1]
     np.save( pj(hls_dir, g_hlstb_stub % (bbox[0], bbox[1], bbox[2], bbox[3])),
             tb_chips )
+
+# Convert the cdl file into an rgb image with appropriate colors and labels
+def transform_cdl(cdl):
+    cat_dict = get_cat_dict(cdl)
+    keys = list(cat_dict.keys())
+    h,w = cdl.shape[:2]
+    cdl_rgb = np.zeros((h,w,3))
+    for i in range(256):
+        if i in keys:
+            cdl_rgb[ cdl==i, : ] = np.array( cat_dict[i]["rgb"] )
+        else:
+            cdl_rgb[ cdl==i, : ] = np.zeros(3)
+    cdl_rgb /= 256.0
+    return cdl_rgb,cat_dict
 
 

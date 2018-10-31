@@ -1,8 +1,8 @@
-from cropnet import ae_model.py
-from cropnet import cropnet.py
-from cropnet import datasets.py
-from cropnet import seg_model.py
-from cropnet import seg_trainer.py
+from cropnet import datasets
+from cropnet import ae_model
+from cropnet import cropnet
+from cropnet import seg_model
+from cropnet import seg_trainer
 
 __version__ = "0.0.1"
 

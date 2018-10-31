@@ -35,8 +35,9 @@ HOME = os.path.expanduser("~")
 
 # 224x224 patches to feed into pre-trained ResNet, classify center pixel
 class RGBPatches(Dataset):
-    def __init__(self, data_dir_or_file, labels_dir_or_file, upsample=2, 
-            ingest_patch_size=224):
+    def __init__(self, data_dir_or_file, labels_dir_or_file, cats_dict={},
+            upsample=2, ingest_patch_size=224):
+        self._cats_dict = cats_dict
         self._data_dir = None
         self._data_img = None
         self._img_ht = None
@@ -73,11 +74,17 @@ class RGBPatches(Dataset):
         raw_patch = self._data_img[i_beg:i_end, j_beg:j_end]
         resize_dims = (self._ingest_patch_size, self._ingest_patch_size)
         patch = cv2.resize(raw_patch,resize_dims,interpolation=cv2.INTER_CUBIC)
+        patch = np.transpose(patch, (2,0,1))
         label = self._labels_img[i_beg][j_beg]
+        label = 0 if label not in self._cats_dict else self._cats_dict[label]
+        label = torch.LongTensor([label]).squeeze()
         return patch,label
 
     def __len__(self):
         return self._img_ht * self._img_wd
+
+    def get_cats_dict(self):
+        return self._cats_dict
 
     def _check_dims(self):
         label_h,label_w = self._labels_img.shape[:2]
@@ -124,7 +131,7 @@ class TBChips(Dataset):
     def __getitem__(self, index):
         i = index // self._src_image_size
         j = index % self._src_image_size
-        tb_chip = np.squeeze( self._tb_chips[i,j] )
+        tb_chip = np.squeeze( self._tb_chips[:,:,i,j] )
         tb_chip = torch.FloatTensor(tb_chip).unsqueeze(0)
         return tb_chip,tb_chip
 
@@ -144,12 +151,12 @@ class TBChips(Dataset):
                 self._src_image_size)
         self._tb_chips = load_tb_chips(self._data_dir, src_bbox)
         # TODO load_tb_chips does virtually exactly what the version here does, 
-        # just loads teh npy file directly.  Doesn't create it
-        self._N = self._tb_chips.shape[0] * self._tb_chips.shape[1]
+        # just loads the npy file directly.  Doesn't create it
+        self._N = self._tb_chips.shape[2] * self._tb_chips.shape[3]
 
     def _load_tb_chips_from_npy(self, data_file):
         full_tb_chips = np.load(data_file)
         x0,y0,x1,y1 = self.get_image_bbox()
-        self._tb_chips = full_tb_chips[y0:y1, x0:x1]
-        self._N = self._tb_chips.shape[0] * self._tb_chips.shape[1]
+        self._tb_chips = full_tb_chips[:, :, y0:y1, x0:x1]
+        self._N = self._tb_chips.shape[2] * self._tb_chips.shape[3]
 

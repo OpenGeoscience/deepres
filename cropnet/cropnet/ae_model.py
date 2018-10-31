@@ -32,6 +32,7 @@ class CropNetFCAE(nn.Module):
 
         self._bneck_size = bneck_size
         self._chip_size = chip_size
+        self._name = "cropnetfcae"
 
         chip_size_sq = chip_size * chip_size
 
@@ -56,6 +57,9 @@ class CropNetFCAE(nn.Module):
     def get_input_size(self): # TODO Create a base class with this method, 
             # put in pyt_utils/modelbase.py
         return self._chip_size
+
+    def get_name(self):
+        return self._name
 
     def _decode(self, z):
         z = F.relu( self.fc3(z) )

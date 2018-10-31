@@ -26,5 +26,3 @@ This will put .npy and .png files into $OUTPUT_SUPDIR/hls, including the 4D band
 python make_images.py --hls-dir $HLS_DIR --cdl $CDL_PATH -o $OUTPUT_SUPDIR -x 500 -y 1000 --image-size 750
 
 
-
-

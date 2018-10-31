@@ -26,6 +26,7 @@ def conv_block(c_in, c_out, ksz=3, stride=2, padding=1):
 class CropSeg(nn.Module):
     def __init__(self, image_size, num_classes):
         super(CropSeg, self).__init__()
+        self._name = "cropseg"
 
         if type(image_size) is not tuple or len(image_size)!=3:
             raise RuntimeError("image_size parameter must be a HxWxC tuple")
@@ -46,11 +47,14 @@ class CropSeg(nn.Module):
     def forward(self, x):
         return self._model(x)
 
+    def get_name(self):
+        return self._name
 
 class Pretrained(nn.Module):
     def __init__(self, model_name="resnet18", num_cats=10):
         super(Pretrained, self).__init__()
         self._model = None
+        self._name = "pretrained"
         self._num_cats = num_cats
 
         if model_name=="resnet18":
@@ -67,4 +71,7 @@ class Pretrained(nn.Module):
 
     def forward(self, x):
         return self._model(x)
+
+    def get_name(self):
+        return self._name
 

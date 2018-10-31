@@ -12,7 +12,9 @@ import matplotlib.gridspec as gridspec
 import os
 import shutil
 
-from utils import get_chip_bbox, load_tb_chips, save_tb_chips
+# local imports
+from utils import get_chip_bbox, load_tb_chips, save_tb_chips, make_clut, \
+        transform_cdl
 
 pe = os.path.exists
 pj = os.path.join
@@ -25,6 +27,7 @@ g_time_end_idx = 26
 g_hls_stub = "hls_cls_ark_time%d_band%d_%d_%d_%d_%d.npy" # TODO "ark"
 
 
+# TODO move to utils
 def _map_to_uniform(band):
     band_shape = band.shape
     b = band.flatten()
@@ -47,6 +50,8 @@ def get_cdl_chip(cdl_file, bbox):
     return cdl[ bbox[0]:bbox[2], bbox[1]:bbox[3] ]
 
 def get_hls_chips(hls_dir, bbox_src, bbox=None):
+    raise RuntimeError("This function shouldn't be called anymore, look to " \
+            "delete")
     if bbox is None:
         bbox = bbox_src
     hls_4d = []
@@ -89,25 +94,34 @@ def get_hls_chips(hls_dir, bbox_src, bbox=None):
     # [ ht, wd, band, time ]
     return tb_chips
     
-def make_figure(output_dir, cdl_chip, tb_chips):
+def make_figure(output_dir, cdl_chip, cat_dict, tb_chips):
     plt.figure(figsize=(22,10))
-    nrows,chip_cols = cdl_chip.shape
+    nrows,chip_cols = cdl_chip.shape[:2]
     ncols = 2 * chip_cols + 2
     grid_sz = (nrows, ncols)
     gridspec.GridSpec(nrows, ncols)
 
     plt.subplot2grid(grid_sz, (0,0), rowspan=nrows, colspan=nrows)
-    plt.imshow(cdl_chip, cmap=plt.cm.gray)
+    for k in cat_dict.keys():
+        rgb = np.array(cat_dict[k]["rgb"]) / 256.0
+        name = cat_dict[k]["name"]
+        plt.scatter([10], [10], c=np.array([rgb]), label=name)
+    plt.imshow(cdl_chip)
     ax = plt.gca()
     ax.get_xaxis().set_visible(False)
     ax.get_yaxis().set_visible(False)
+    ax.legend()
     ax.autoscale("off")
 
-    for b,band in enumerate(tb_chips):
-        for idx,chip in enumerate(band):
-            i = b
-            j = chip_cols + 2 + idx
-            plt.subplot2grid(grid_sz, (i,j), rowspan=1, colspan=1)
+#    for b,band in enumerate(tb_chips):
+#        for idx,chip in enumerate(band):
+#            i = b
+#            j = chip_cols + 2 + idx
+    for i in range(tb_chips.shape[2]):
+        for j in range(tb_chips.shape[3]):
+            chip = tb_chips[:,:,i,j]
+            j_idx = chip_cols + 2 + j
+            plt.subplot2grid(grid_sz, (i,j_idx), rowspan=1, colspan=1)
             plt.imshow(chip, cmap=plt.cm.gray)
             ax = plt.gca()
             ax.get_xaxis().set_visible(False)
@@ -121,12 +135,13 @@ def main(args):
     bbox_src = get_chip_bbox(args.src_image_x, args.src_image_y, 
             args.src_image_size)
     cdl_chip = get_cdl_chip(args.ground_truth_file, bbox)
+    cdl_chip,cat_dict = transform_cdl(cdl_chip)
     if args.saved_tbchips_dir is None:
         tb_chips = get_hls_chips(args.hls_dir, bbox_src, bbox)
     else:
         tb_chips = load_tb_chips(args.saved_tbchips_dir, bbox_src, bbox)
     if args.make_figure:
-        make_figure(args.output_dir, cdl_chip, tb_chips)
+        make_figure(args.output_dir, cdl_chip, cat_dict, tb_chips)
 
 
 if __name__ == "__main__":
