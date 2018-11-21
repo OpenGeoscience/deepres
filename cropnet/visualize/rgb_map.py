@@ -57,6 +57,7 @@ def get_rgb(tb_chips):
     rgb = np.transpose(rgb, (1,2,0))
     return rgb
 
+# TODO move to utils
 def normalize_feats(features):
     if len(features.shape) != 3:
         raise RuntimeError("Expecting features input to have 3 dimensions")

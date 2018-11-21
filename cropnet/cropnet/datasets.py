@@ -2,6 +2,7 @@
 Datasets for cropnet
 """
 
+import argparse
 import csv
 import cv2
 import logging
@@ -33,8 +34,72 @@ pj = os.path.join
 HOME = os.path.expanduser("~")
 
 
-# 224x224 patches to feed into pre-trained ResNet, classify center pixel
+# 224x224 patches to feed into pre-trained ResNet, classifying whole patch 
 class RGBPatches(Dataset):
+    def __init__(self, data_dir_or_file, labels_dir_or_file, cats_dict={},
+            ingest_patch_size=224, mode="test"):
+        self._cats_dict = cats_dict
+        self._data_dir = None
+        self._data_img = None
+        self._img_ht = None
+        self._img_wd = None
+        self._ingest_patch_size = ingest_patch_size
+        self._label_mode = None
+        self._labels_dir = None
+        self._labels_img = None
+        self._mode = mode
+
+        if os.path.isdir(data_dir_or_file):
+            self._data_dir = data_dir_or_file
+            raise NotImplementedError()
+        else:
+            self._load_rgb(data_dir_or_file)
+
+        if os.path.isdir(labels_dir_or_file):
+            self._data_dir = labels_dir_or_file
+            raise NotImplementedError()
+        else:
+            self._load_labels(labels_dir_or_file)
+
+    def __getitem__(self, index):
+        i = index % (self._img_ht // self._ingest_patch_size)
+        j = index // (self._img_ht // self._ingest_patch_size)
+
+        i_beg = i * self._ingest_patch_size
+        i_end = i_beg + self._ingest_patch_size
+        j_beg = j * self._ingest_patch_size
+        j_end = j_beg + self._ingest_patch_size
+        patch = self._data_img[i_beg:i_end, j_beg:j_end]
+        label = self._labels_img[i_beg:i_end, j_beg:j_end]
+        return patch,label
+
+    def __len__(self):
+        return (self._img_ht // self._ingest_patch_size) \
+                    * (self._img_wd // self._ingest_patch_size)
+
+    def get_cats_dict(self):
+        return self._cats_dict
+
+    def _load_labels(self, data_npy_file):
+        print("Loading labels file %s ..." % (data_npy_file))
+        self._labels_img = np.load(data_npy_file)
+        if self._labels_img is None:
+            raise RuntimeError("Image file %s does not exist or is not a valid"\
+                    " image")
+        print("...Done.  Shape is %s" % repr(self._labels_img.shape))
+
+    def _load_rgb(self, data_npy_file):
+        print("Loading rgb file %s ..." % (data_npy_file))
+        self._data_img = np.load(data_npy_file)
+        if self._data_img is None:
+            raise RuntimeError("Image file %s does not exist or is not a valid"\
+                    " image")
+        self._img_ht,self._img_wd = self._data_img.shape[:2]
+        print("...Done.  Shape is %s" % repr(self._data_img.shape))
+
+
+# 224x224 patches to feed into pre-trained ResNet, classifying center pixel
+class RGBPatchesCenter(Dataset):
     def __init__(self, data_dir_or_file, labels_dir_or_file, cats_dict={},
             upsample=2, ingest_patch_size=224):
         self._cats_dict = cats_dict
@@ -73,10 +138,12 @@ class RGBPatches(Dataset):
         j_end = j + self._pad
         raw_patch = self._data_img[i_beg:i_end, j_beg:j_end]
         resize_dims = (self._ingest_patch_size, self._ingest_patch_size)
-        patch = cv2.resize(raw_patch,resize_dims,interpolation=cv2.INTER_CUBIC)
+        patch = cv2.resize(raw_patch,resize_dims,
+                interpolation=cv2.INTER_CUBIC)
         patch = np.transpose(patch, (2,0,1))
         label = self._labels_img[i_beg][j_beg]
-        label = 0 if label not in self._cats_dict else self._cats_dict[label]
+        label = 0 if label not in self._cats_dict \
+                else self._cats_dict[label]
         label = torch.LongTensor([label]).squeeze()
         return patch,label
 
@@ -160,3 +227,48 @@ class TBChips(Dataset):
         self._tb_chips = full_tb_chips[:, :, y0:y1, x0:x1]
         self._N = self._tb_chips.shape[2] * self._tb_chips.shape[3]
 
+
+def _normalize_feats(features):
+    if len(features.shape) != 3:
+        raise RuntimeError("Expecting features input to have 3 dimensions")
+    for k in range(features.shape[2]):
+        c = features[:,:,k]
+        features[:,:,k] = (c - np.min(c)) / (np.max(c) - np.min(c))
+    return features
+
+def _main(args):
+    if not pe(args.output_dir):
+        os.makedirs(args.output_dir)
+
+    if args.test == "RGBPatches":
+        print("Testing RGBPatches...")
+        dataset = RGBPatches(args.data_dir_or_file, args.labels_dir_or_file, 
+                mode="train")
+        print("The length of %s is %d." % (args.test, len(dataset)))
+        N = len(dataset) if args.num_outputs<0 else args.num_outputs
+        for i in range(N):
+            patch,label = dataset[i]
+            print("Patch %i range, (%f, %f); label %i range, (%i, %i)" \
+                    % (i, np.min(patch), np.max(patch), i, np.min(label),
+                        np.max(label)))
+            patch = _normalize_feats(patch)
+            patch = (patch * 255.0).astype(np.uint8)
+            cv2.imwrite(pj(args.output_dir, "patch_%03d.png" % (i)), patch)
+            cv2.imwrite(pj(args.output_dir, "label_%03d.png" % (i)), label)
+        print("...Done")
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-t", "--test", type=str, default="RGBPatches",
+            choices=["RGBPatches"])
+    parser.add_argument("-d", "--data-dir-or-file", type=str,
+            default=pj(HOME, "Training/cropnet/sessions/session_07/feats.npy"))
+    parser.add_argument("-l", "--labels-dir-or-file", type=str,
+            default="/media/data/Datasets/HLS/test_imgs/cdl/" \
+                    "cdl_2016_neAR_0_0_500_500.npy")
+    parser.add_argument("-o", "--output-dir", type=str, 
+            default=pj(HOME, "Training/cropnet/test_out"))
+    parser.add_argument("-n", "--num-outputs", type=int, default=20)
+    args = parser.parse_args()
+    _main(args)
+    

@@ -26,7 +26,7 @@ from general.utils import create_session_dir
 # Local imports
 from ae_model import CropNetFCAE, load_ae_model
 from ae_trainer import AETrainer
-from datasets import RGBPatches, TBChips
+from datasets import RGBPatchesCenter, TBChips
 from seg_model import CropSeg, Pretrained
 from utils import get_features
 
@@ -83,7 +83,7 @@ def get_seg_loader(feats_file_path, cdl_file_path, batch_size, cats):
     cats_dict = OrderedDict()
     for i,c in enumerate(cats):
         cats_dict[c] = i+1 # Reserve 0 for background category
-    dataset = RGBPatches(feats_file_path, cdl_file_path, cats_dict)
+    dataset = RGBPatchesCenter(feats_file_path, cdl_file_path, cats_dict)
     train_loader = DataLoader(dataset=dataset,
                                 batch_size=batch_size,
                                 shuffle=True,
