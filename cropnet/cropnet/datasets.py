@@ -64,11 +64,19 @@ class RGBPatches(Dataset):
     def __getitem__(self, index):
         i = index % (self._img_ht // self._ingest_patch_size)
         j = index // (self._img_ht // self._ingest_patch_size)
-
-        i_beg = i * self._ingest_patch_size
-        i_end = i_beg + self._ingest_patch_size
-        j_beg = j * self._ingest_patch_size
-        j_end = j_beg + self._ingest_patch_size
+        
+        sz = self._ingest_patch_size
+        if self._mode=="train":
+            io,jo = (torch.rand(2).data - 0.5) / 2.0
+            i_beg = i * sz + io*sz
+            j_beg = j * sz + jo*sz
+            i_beg = int( i_beg.clamp(0.0, self._img_ht - sz) )
+            j_beg = int( j_beg.clamp(0.0, self._img_wd - sz) )
+        else:
+            i_beg = i * sz
+            j_beg = j * sz
+        i_end = i_beg + sz
+        j_end = j_beg + sz
         patch = self._data_img[i_beg:i_end, j_beg:j_end]
         label = self._labels_img[i_beg:i_end, j_beg:j_end]
         return patch,label
@@ -228,9 +236,12 @@ class TBChips(Dataset):
         self._N = self._tb_chips.shape[2] * self._tb_chips.shape[3]
 
 
-def _normalize_feats(features):
+
+def _normalize_feats(features, do_copy=False):
     if len(features.shape) != 3:
         raise RuntimeError("Expecting features input to have 3 dimensions")
+    if do_copy:
+        features = np.copy(features)
     for k in range(features.shape[2]):
         c = features[:,:,k]
         features[:,:,k] = (c - np.min(c)) / (np.max(c) - np.min(c))
@@ -247,11 +258,11 @@ def _main(args):
         print("The length of %s is %d." % (args.test, len(dataset)))
         N = len(dataset) if args.num_outputs<0 else args.num_outputs
         for i in range(N):
-            patch,label = dataset[i]
+            patch,label = dataset[i % len(dataset)]
             print("Patch %i range, (%f, %f); label %i range, (%i, %i)" \
                     % (i, np.min(patch), np.max(patch), i, np.min(label),
                         np.max(label)))
-            patch = _normalize_feats(patch)
+            patch = _normalize_feats(patch, do_copy=True)
             patch = (patch * 255.0).astype(np.uint8)
             cv2.imwrite(pj(args.output_dir, "patch_%03d.png" % (i)), patch)
             cv2.imwrite(pj(args.output_dir, "label_%03d.png" % (i)), label)
