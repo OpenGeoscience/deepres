@@ -95,7 +95,7 @@ def get_hls_subregions_by_time(timepoint, hls_dir, bbox, saver=None):
         path = pj(hls_dir, "hls_cls_ark_%02d.tif" % (b))
         img = gdal.Open(path)
         if img is None:
-            raise RuntimeError("Tmage %s not found" % (path))
+            raise RuntimeError("Image %s not found" % (path))
         layer = img.GetRasterBand(timepoint)
         region = layer.ReadAsArray()
         region = region[ bbox[0]:bbox[2], bbox[1]:bbox[3] ]

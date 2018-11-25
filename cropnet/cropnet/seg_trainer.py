@@ -8,11 +8,10 @@ import os
 # pytorch includes
 import torch
 import torchvision as tv
-from torchvision.models import resnet18
 
 # local includes
 from datasets import RGBPatches
-from unet import *
+from seg_model import CropSeg
 
 pe = os.path.exists
 pj = os.path.join
@@ -22,8 +21,7 @@ HOME = os.path.expanduser("~")
 def main(args):
     dataset = RGBPatches(args.data_dir_or_file, args.labels_dir_or_file,
             mode="train")
-    encoder = resnet18(pretrained=True)
-    dyunet = DynamicUnet(encoder, n_classes=args.num_classes)
+    model = CropSeg(256, args.num_classes)
 
 
 
@@ -37,6 +35,7 @@ if __name__ == "__main__":
     parser.add_argument("-l", "--labels-dir-or-file", type=str,
             default="/media/data/Datasets/HLS/test_imgs/cdl/" \
                     "cdl_2016_neAR_0_0_500_500.npy")
+    parser.add_argument("-s", "--image-size", type=int, default=256)
     parser.add_argument("--nc", "--num-classes", dest="num_classes", type=int,
             default=4)
     parser.add_argument("--no-cuda", dest="use_cuda", action="store_false")

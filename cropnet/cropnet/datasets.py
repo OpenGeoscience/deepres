@@ -8,6 +8,7 @@ import cv2
 import logging
 import numpy as np
 import os
+import platform
 import torch
 import torchvision as tv
 
@@ -32,6 +33,10 @@ logging.getLogger("PIL.Image").setLevel(logging.WARNING)
 pe = os.path.exists
 pj = os.path.join
 HOME = os.path.expanduser("~")
+if platform.node() == "matt-XPS-8900":
+    DATA = HOME
+else:
+    DATA = "/media/data"
 
 
 # 224x224 patches to feed into pre-trained ResNet, classifying whole patch 
@@ -248,8 +253,11 @@ def _normalize_feats(features, do_copy=False):
     return features
 
 def _main(args):
-    if not pe(args.output_dir):
-        os.makedirs(args.output_dir)
+    if not pe(args.output_supdir):
+        os.makedirs(args.output_supdir)
+    output_dir = pj(args.output_supdir, args.test)
+    if not pe(output_dir):
+        os.makedirs(output_dir)
 
     if args.test == "RGBPatches":
         print("Testing RGBPatches...")
@@ -264,8 +272,8 @@ def _main(args):
                         np.max(label)))
             patch = _normalize_feats(patch, do_copy=True)
             patch = (patch * 255.0).astype(np.uint8)
-            cv2.imwrite(pj(args.output_dir, "patch_%03d.png" % (i)), patch)
-            cv2.imwrite(pj(args.output_dir, "label_%03d.png" % (i)), label)
+            cv2.imwrite(pj(output_dir, "patch_%03d.png" % (i)), patch)
+            cv2.imwrite(pj(output_dir, "label_%03d.png" % (i)), label)
         print("...Done")
 
 if __name__ == "__main__":
@@ -275,9 +283,9 @@ if __name__ == "__main__":
     parser.add_argument("-d", "--data-dir-or-file", type=str,
             default=pj(HOME, "Training/cropnet/sessions/session_07/feats.npy"))
     parser.add_argument("-l", "--labels-dir-or-file", type=str,
-            default="/media/data/Datasets/HLS/test_imgs/cdl/" \
-                    "cdl_2016_neAR_0_0_500_500.npy")
-    parser.add_argument("-o", "--output-dir", type=str, 
+            default=pj(DATA, "Datasets/HLS/test_imgs/cdl/" \
+                    "cdl_2016_neAR_0_0_500_500.npy"))
+    parser.add_argument("-o", "--output-supdir", type=str, 
             default=pj(HOME, "Training/cropnet/test_out"))
     parser.add_argument("-n", "--num-outputs", type=int, default=20)
     args = parser.parse_args()
