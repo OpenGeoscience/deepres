@@ -3,15 +3,17 @@ UNet-like model for doing segmentation
 """
 
 import argparse
+import json
 import numpy as np
 import os
+from collections import OrderedDict
+
+# pytorch includes
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision as tv
-
 from torch.autograd import Variable
-
 from torchvision.models import resnet18, resnet34, resnet50
 
 pe = os.path.exists
@@ -19,22 +21,23 @@ pj = os.path.join
 HOME = os.path.expanduser("~")
 
 
-"""
-ResNet18 top-level layers:
-conv1
-bn1
-relu
-maxpool
-layer1
-layer2
-layer3
-layer4
-avgpool
-fc
-"""
 class CropUNet(nn.Module):
-    def __init__(self):
-        self._encoder = resnet18(pretrained=True)
+    def __init__(self, backbone="resnet18"):
+        super().__init__()
+        if backbone == "resnet18":
+            resnet = resnet18(pretrained=True)
+        elif backbone == "resnet34":
+            resnet = resnet34(pretrained=True)
+        elif backbone == "resnet50":
+            resnet = resnet50(pretrained=True)
+        else:
+            raise RuntimeError("Unrecognized backbone network, %s" % backbone)
+        self._encoder = []
+        for name,layers in resnet.named_children():
+            if name == "fc": break
+            self._encoder.append(layers)
+
+        self._deconv1 = DecoderBlock(specs["avgpool"]["out"], # TODO
         
 
 def _main(args):
@@ -44,13 +47,27 @@ def _main(args):
     if not pe(output_dir):
         os.makedirs(output_dir)
     
-    crop_unet = CropUNet()
-    with open(pj(output_dir, "crop_unet_model.txt")) as fp:
+    crop_unet = CropUNet(backbone=args.model_name)
+    with open(pj(output_dir, "crop_unet_model.txt"), "w") as fp:
         fp.write(repr(crop_unet) + "\n")
 
-    for ch in self._encoder.children():
-        pass
+    sz = (3, 224, 224)
+    x = torch.FloatTensor(1, *sz)
+    specs = OrderedDict()
+    for m in crop_unet._encoder.named_children():
+        name,layers = m
+        in_shape = x.shape
+        if name == "fc":
+            x = x.view(x.size(0), -1)
+        x = layers(x)
+        out_shape = x.shape
+        print("%s, In: %s, Out: %s" % (name, repr(list(in_shape)),
+            repr(list(out_shape))))
+        specs[name] = { "in_shape" : in_shape, "out_shape" : out_shape }
         # TODO print out tensor input, output dimensions of each top-level block
+
+    with open(pj(output_dir, "crop_unet_model.txt"), "w") as fp:
+        json.dump(specs, fp, indent=2)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -60,6 +77,18 @@ if __name__ == "__main__":
             choices=["resnet18", "resnet34", "resnet50"])
     args = parser.parse_args()
     _main(args)
+
+#class ConvRelu(nn.Module):
+#    def __init__(self, in_, out):
+#        super(ConvRelu, self).__init__()
+#        self.conv = conv3x3(in_, out)
+#        self.activation = nn.ReLU(inplace=True)
+#
+#    def forward(self, x):
+#        x = self.conv(x)
+#        x = self.activation(x)
+#        return x
+#
 
 #class DecoderBlock(nn.Module):
 #    """Paramaters for Deconvolution were chosen to avoid artifacts, following
