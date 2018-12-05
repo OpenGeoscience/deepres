@@ -193,7 +193,7 @@ def _test_show_layers(fp, tnet):
         fp.write(s + "\n")
 
 
-def _main(args):
+def _test_main(args):
     if not pe(args.output_supdir):
         os.makedirs(args.output_supdir)
     output_dir = pj(args.output_supdir, "cropunet")
@@ -219,5 +219,5 @@ if __name__ == "__main__":
     parser.add_argument("-m", "--model-name", type=str, default="resnet18",
             choices=["resnet18", "resnet34", "resnet50"])
     args = parser.parse_args()
-    _main(args)
+    _test_main(args)
 
