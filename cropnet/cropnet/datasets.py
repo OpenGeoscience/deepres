@@ -23,7 +23,7 @@ from torch.utils.data import DataLoader
 # ml_utils imports
 
 # local imports
-from utils import get_chip_bbox, load_tb_chips
+from utils import get_chip_bbox, load_tb_chips, make_clut, transform_cdl
 
 
 logging.getLogger("PIL").setLevel(logging.WARNING)
@@ -44,6 +44,7 @@ class RGBPatches(Dataset):
     def __init__(self, data_dir_or_file, labels_dir_or_file, cats_dict={},
             ingest_patch_size=224, mode="test"):
         self._cats_dict = cats_dict
+        self._cats = [3, 4, 5, 190] # TODO--just estimated from a single chip
         self._data_dir = None
         self._data_img = None
         self._img_ht = None
@@ -83,8 +84,27 @@ class RGBPatches(Dataset):
         i_end = i_beg + sz
         j_end = j_beg + sz
         patch = self._data_img[i_beg:i_end, j_beg:j_end]
-        label = self._labels_img[i_beg:i_end, j_beg:j_end]
-        return patch,label
+        patch = np.copy(patch)
+        for k in range(patch.shape[2]):
+            c = patch[:,:,k]
+            patch[:,:,k] = (c - np.min(c)) / (np.max(c) - np.min(c))
+        raw_label = self._labels_img[i_beg:i_end, j_beg:j_end]
+        label = np.copy(raw_label)
+
+        bgnd_mask = np.ones_like(label) > 0
+        ct = 1
+#        for k,v in self._cats_dict.items():
+        for k in self._cats:
+            mask_k = raw_label==k
+            label[mask_k] = ct
+            ct += 1
+            bgnd_mask[mask_k] = False
+        label[bgnd_mask] = 0
+
+        label = torch.LongTensor([label]).squeeze()
+        patch = Image.fromarray( np.uint8(patch*255) )
+        transform = tv.transforms.ToTensor()
+        return transform(patch),label 
 
     def __len__(self):
         return (self._img_ht // self._ingest_patch_size) \
@@ -92,6 +112,9 @@ class RGBPatches(Dataset):
 
     def get_cats_dict(self):
         return self._cats_dict
+
+    def get_num_cats(self):
+        return len(self._cats) + 1
 
     def _load_labels(self, data_npy_file):
         print("Loading labels file %s ..." % (data_npy_file))
@@ -151,8 +174,7 @@ class RGBPatchesCenter(Dataset):
         j_end = j + self._pad
         raw_patch = self._data_img[i_beg:i_end, j_beg:j_end]
         resize_dims = (self._ingest_patch_size, self._ingest_patch_size)
-        patch = cv2.resize(raw_patch,resize_dims,
-                interpolation=cv2.INTER_CUBIC)
+        patch = cv2.resize(raw_patch,resize_dims,interpolation=cv2.INTER_CUBIC)
         patch = np.transpose(patch, (2,0,1))
         label = self._labels_img[i_beg][j_beg]
         label = 0 if label not in self._cats_dict \
@@ -242,7 +264,7 @@ class TBChips(Dataset):
 
 
 
-def _normalize_feats(features, do_copy=False):
+def _test_normalize_feats(features, do_copy=False):
     if len(features.shape) != 3:
         raise RuntimeError("Expecting features input to have 3 dimensions")
     if do_copy:
@@ -252,7 +274,7 @@ def _normalize_feats(features, do_copy=False):
         features[:,:,k] = (c - np.min(c)) / (np.max(c) - np.min(c))
     return features
 
-def _main(args):
+def _test_main(args):
     if not pe(args.output_supdir):
         os.makedirs(args.output_supdir)
     output_dir = pj(args.output_supdir, args.test)
@@ -261,16 +283,22 @@ def _main(args):
 
     if args.test == "RGBPatches":
         print("Testing RGBPatches...")
+        cats_dict = make_clut()
         dataset = RGBPatches(args.data_dir_or_file, args.labels_dir_or_file, 
-                mode="train")
+                mode="train", cats_dict=cats_dict)
+        num_cats = dataset.get_num_cats()
+        inc = 256 // num_cats
         print("The length of %s is %d." % (args.test, len(dataset)))
         N = len(dataset) if args.num_outputs<0 else args.num_outputs
         for i in range(N):
             patch,label = dataset[i % len(dataset)]
+            patch = np.transpose( patch.cpu().data.numpy(), (1,2,0) )
+            label = label.cpu().data.numpy() * inc
             print("Patch %i range, (%f, %f); label %i range, (%i, %i)" \
                     % (i, np.min(patch), np.max(patch), i, np.min(label),
                         np.max(label)))
-            patch = _normalize_feats(patch, do_copy=True)
+            print("\tShape: %s" % repr(patch.shape))
+            patch = _test_normalize_feats(patch, do_copy=True)
             patch = (patch * 255.0).astype(np.uint8)
             cv2.imwrite(pj(output_dir, "patch_%03d.png" % (i)), patch)
             cv2.imwrite(pj(output_dir, "label_%03d.png" % (i)), label)
@@ -289,5 +317,5 @@ if __name__ == "__main__":
             default=pj(HOME, "Training/cropnet/test_out"))
     parser.add_argument("-n", "--num-outputs", type=int, default=20)
     args = parser.parse_args()
-    _main(args)
+    _test_main(args)
     

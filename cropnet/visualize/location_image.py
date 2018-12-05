@@ -13,8 +13,7 @@ import os
 import shutil
 
 # local imports
-from utils import get_chip_bbox, load_tb_chips, save_tb_chips, make_clut, \
-        transform_cdl
+from utils import get_chip_bbox, load_tb_chips, save_tb_chips, transform_cdl
 
 pe = os.path.exists
 pj = os.path.join
