@@ -63,6 +63,7 @@ def main(args):
             preds = np.argmax(yhat, axis=1)
             acc = 100.0 * np.mean( preds==labels.cpu().data.numpy() )
         print("Epoch %d: Loss %0.4f, Acc. %0.2f" % (epoch, loss.item(), acc))
+    torch.save(model.state_dict(), pj(args.output_dir, "seg_model.pkl"))
     
 
 def _test_main(args):
@@ -101,6 +102,8 @@ if __name__ == "__main__":
     parser.add_argument("-l", "--labels-dir-or-file", type=str,
             default=pj(DATA, "Datasets/HLS/test_imgs/cdl/" \
                     "cdl_2016_neAR_0_0_500_500.npy"))
+    parser.add_argument("-o", "--output-dir", type=str,
+            default=pj(HOME, "Training/cropnet/models"))
     parser.add_argument("-s", "--image-size", type=int, default=256)
     parser.add_argument("-n", "--num-epochs", type=int, default=100)
     parser.add_argument("-b", "--batch-size", type=int, default=4) # TODO
