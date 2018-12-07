@@ -13,7 +13,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision as tv
 
-from unet import DynamicUnet
 from torch.autograd import Variable
 
 from torchvision.models import resnet18, resnet34, resnet50
@@ -22,43 +21,6 @@ from torchvision.models import vgg16
 pe = os.path.exists
 pj = os.path.join
 HOME = os.path.expanduser("~")
-
-def conv_block(c_in, c_out, ksz=3, stride=2, padding=1):
-    block = nn.Sequential(
-        nn.Conv2d(c_in, c_out, kernel_size=ksz, stride=stride, padding=padding),
-        nn.ReLU(),
-        nn.BatchNorm2d(c_out)
-        )
-    return block
-
-class CropSeg(nn.Module):
-    def __init__(self, image_size, num_classes, ch_base=16):
-        super(CropSeg, self).__init__()
-        self._name = "cropseg"
-
-        if type(image_size) is not tuple or len(image_size)!=3:
-            raise RuntimeError("image_size parameter must be a HxWxC tuple")
-           
-#        img_c = image_size[0]
-#        img_ht = image_size[1]
-#        img_wd = image_size[2]
-#        conv1 = conv_block(img_c, ch_base*2)
-#        conv2 = conv_block(ch_base*2, ch_base*4)
-#        conv3 = conv_block(ch_base*4, ch_base*8)
-#        conv4 = conv_block(ch_base*8, ch_base*16)
-#        conv5 = conv_block(ch_base*16, ch_base*32)
-#
-#        encoder = nn.Sequential(conv1, conv2, conv3, conv4, conv5)
-
-        encoder = vgg16(pretrained=True)
-
-        self._model = DynamicUnet(encoder, num_classes)
-
-    def forward(self, x):
-        return self._model(x)
-
-    def get_name(self):
-        return self._name
 
 class Pretrained(nn.Module):
     def __init__(self, model_name="resnet18", num_cats=10):

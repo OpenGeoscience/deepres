@@ -21,13 +21,13 @@ from torch.utils.data import DataLoader
 from torchvision.utils import save_image
 
 # ml_utils imports
-from general.utils import create_session_dir
+from general.utils import create_session_dir, retain_session_dir
 
 # Local imports
 from ae_model import CropNetFCAE, load_ae_model
 from ae_trainer import AETrainer
 from datasets import RGBPatchesCenter, TBChips
-from seg_model import CropSeg, Pretrained
+from seg_model import Pretrained
 from utils import get_features
 
 pe = os.path.exists
@@ -141,7 +141,7 @@ def main(args):
                 session_dir=session_dir)
         ae_trainer.train()
 
-    if args.ae_model_only:
+    if not args.ae_model_only:
         cats = get_cats(args.cdl_file_path)
         num_cats = len(cats)
         print("Number of land cover categories above threshold: %d" \
@@ -158,14 +158,19 @@ def main(args):
             # operate over an entire directory
         feats_path = pj(session_dir, "feats.npy")
         np.save(feats_path, features)
-        train_seg_loader = get_seg_loader(feats_path, args.cdl_file_path,
-                args.batch_size, cats)
-        criterion = nn.CrossEntropyLoss()
-        seg_trainer = ClassTrainer(seg_model,
-                (train_seg_loader, None),
-                criterion=criterion,
-                session_dir=session_dir)
-        seg_trainer.train()      
+        print("Features saved to %s" % (feats_path))
+#        print("Now training segmentation network...")
+#        train_seg_loader = get_seg_loader(feats_path, args.cdl_file_path,
+#                args.batch_size, cats)
+#        criterion = nn.CrossEntropyLoss()
+#        seg_trainer = ClassTrainer(seg_model,
+#                (train_seg_loader, None),
+#                criterion=criterion,
+#                session_dir=session_dir)
+#        seg_trainer.train()
+#        print("...Done training segmentation network")
+
+    retain_session_dir(session_dir)
 
 
 if __name__ == "__main__":
@@ -174,6 +179,7 @@ if __name__ == "__main__":
     parser.add_argument("--ae-model-path", type=str, default=None,
             help="Optionally supply a pre-trained AE model, otherwise AE will" \
                     " be retrained from scratch")
+    parser.add_argument("--ae-model-only", action="store_true")
     parser.add_argument("-d", "--data-dir", type=str,
             default=pj(HOME, "Datasets/HLS/test_imgs/hls"))
     parser.add_argument("--test-data-dir", type=str,

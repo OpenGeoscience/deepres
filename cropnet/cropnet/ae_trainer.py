@@ -47,6 +47,7 @@ class AETrainer(TrainerBase):
         super(AETrainer, self)._write_batch(*args)
 
     def _write_epoch(self, *args):
+        epoch,test_batch_ct = args
         img_size = self._model.get_input_size()
         dataset = self.get_test_loader().dataset
         inc = len(dataset) // self._sampler_batch_size
