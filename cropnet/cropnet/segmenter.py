@@ -32,7 +32,9 @@ else:
 
 
 def main(args):
-    output_dir = create_session_dir(args.output_supdir)
+    session_dir = os.path.dirname(args.data_dir_or_file)
+    supdir = pj(session_dir, "segmentations")
+    output_dir = create_session_dir(supdir, dir_stub="segment_%02d")
 
     dataset = RGBPatches(args.data_dir_or_file, args.labels_dir_or_file,
             mode="test")
@@ -67,7 +69,8 @@ def main(args):
             preds = Variable(preds).cuda()
         else:
             preds = Variable(preds)
-        tv.utils.save_image([preds, label], pj(output_dir,
+        patch = patch.squeeze()
+        tv.utils.save_image([patch, preds, label], pj(output_dir,
             "segments_%03d.png" % (i)))
 
     retain_session_dir(output_dir)
@@ -82,10 +85,8 @@ if __name__ == "__main__":
             help="If set, just run the test code")
     parser.add_argument("--mp", "--model-path", dest="model_path", type=str,
             default=pj(HOME, "Training/cropnet/models/seg_model.pkl"))
-    parser.add_argument("-o", "--output-supdir", type=str, 
-            default=pj(HOME, "Training/cropnet/sessions"))
     parser.add_argument("-d", "--data-dir-or-file", type=str,
-            default=pj(HOME, "Training/cropnet/sessions/session_01/feats.npy"))
+            default=pj(HOME, "Training/cropnet/sessions/session_07/feats.npy"))
     parser.add_argument("-l", "--labels-dir-or-file", type=str,
             default=pj(DATA, "Datasets/HLS/test_imgs/cdl/" \
                     "cdl_2016_neAR_0_0_500_500.npy"))
