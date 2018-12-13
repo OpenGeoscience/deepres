@@ -27,7 +27,6 @@ from general.utils import create_session_dir, retain_session_dir
 from ae_model import CropNetFCAE, load_ae_model
 from ae_trainer import AETrainer
 from datasets import RGBPatchesCenter, TBChips
-from seg_model import Pretrained
 from utils import get_features
 
 pe = os.path.exists
@@ -114,17 +113,6 @@ def make_ae_model(ae_network, chip_size, bneck_size):
         raise RuntimeError("Unrecognized network %s" % (ae_network))
     return model.cuda()
 
-def make_seg_model(seg_network, **kwargs):
-    if seg_network == "Pretrained":
-        model = Pretrained(**kwargs)
-    elif seg_network == "CropSeg":
-        raise NotImplementedError()
-    else:
-        raise RuntimeError("Model %s not recognized" % (seg_network))
-    return model.cuda().eval()
-
-#    def __init__(self, model, loaders, criterion, session_dir, num_epochs=1000,              base_lr=0.001, num_lr_drops=2, lr_drop_factor=5, log_interval=10):
-
 def main(args):
     session_dir = create_session_dir(args.output_supdir)
     test_ae_loader = None
@@ -146,8 +134,6 @@ def main(args):
         num_cats = len(cats)
         print("Number of land cover categories above threshold: %d" \
                 % (num_cats))
-        seg_model = make_seg_model("Pretrained", model_name="resnet18", 
-                num_cats=num_cats+1) # TODO
         if ae_model is None:
             ae_model = load_ae_model(args.ae_model_path, args.network, 
                     chip_size=19, bneck_size=3) # TODO
@@ -159,16 +145,6 @@ def main(args):
         feats_path = pj(session_dir, "feats.npy")
         np.save(feats_path, features)
         print("Features saved to %s" % (feats_path))
-#        print("Now training segmentation network...")
-#        train_seg_loader = get_seg_loader(feats_path, args.cdl_file_path,
-#                args.batch_size, cats)
-#        criterion = nn.CrossEntropyLoss()
-#        seg_trainer = ClassTrainer(seg_model,
-#                (train_seg_loader, None),
-#                criterion=criterion,
-#                session_dir=session_dir)
-#        seg_trainer.train()
-#        print("...Done training segmentation network")
 
     retain_session_dir(session_dir)
 
