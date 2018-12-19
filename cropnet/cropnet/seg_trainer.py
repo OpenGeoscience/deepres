@@ -94,9 +94,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--test", action="store_true",
             help="If set, just run the test code")
-    parser.add_argument("--ae-model-path", type=str, 
-            default=pj(HOME, "Training/cropnet/sessions/session_10/models/" \
-                    "pretrained.pkl"))
     parser.add_argument("-d", "--data-dir-or-file", type=str,
             default=pj(HOME, "Training/cropnet/sessions/session_07/feats.npy"))
     parser.add_argument("-l", "--labels-dir-or-file", type=str,

@@ -30,7 +30,16 @@ def _hls_saver(region, path_stub, t, b, bbox):
     np.save(img_path_npy, region)
     print("Saved %s and %s to disk" % (img_path_png, img_path_npy))
     
-def _map_to_uniform(band):
+def _map_to_uniform_fast(band):
+    band_shape = band.shape
+    b = band.flatten()
+    N = len(b)
+    b_min = np.quantile(b, 0.005)
+    b_max = np.quantile(b, 0.995)
+    b = np.clip( (b-b_min)/(b_max-b_min), 0.0, 1.0 )
+    return b
+
+def _map_to_uniform_slow(band):
     band_shape = band.shape
     b = band.flatten()
     b_max = np.quantile(band, 0.995)
@@ -97,7 +106,7 @@ def make_and_save_tbchips(hls_dir, bbox_src, bbox=None):
     print("Normalizing band data...")
     for b in range(g_num_spectral):
         band = hls_4d[b,:,:,:]
-        band[:,:,:] = _map_to_uniform(band)
+        band[:,:,:] = _map_to_uniform_fast(band)
     print("...Done")
 
     save_tb_chips(hls_dir, hls_4d, bbox_src, bbox)
