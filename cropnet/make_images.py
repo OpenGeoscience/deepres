@@ -33,6 +33,15 @@ def _hls_saver(region, path_stub, t, b, bbox):
 def _map_to_uniform(band):
     band_shape = band.shape
     b = band.flatten()
+    b_max = np.quantile(band, 0.995)
+    b_min = np.quantile(band, 0.005)
+    b = (b - b_min) / (b_max - b_min)
+    b = np.clip(b, 0.0, 1.0)
+    return b.reshape(*band_shape)
+
+def _map_to_uniform_old(band):
+    band_shape = band.shape
+    b = band.flatten()
     N = len(b)
     sb_pairs = sorted(enumerate(b), key=lambda x: x[1])
     idxs,_ = zip(*sb_pairs)

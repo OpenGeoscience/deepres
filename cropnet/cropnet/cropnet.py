@@ -159,16 +159,6 @@ def main(args):
         feats_path = pj(session_dir, "feats.npy")
         np.save(feats_path, features)
         print("Features saved to %s" % (feats_path))
-#        print("Now training segmentation network...")
-#        train_seg_loader = get_seg_loader(feats_path, args.cdl_file_path,
-#                args.batch_size, cats)
-#        criterion = nn.CrossEntropyLoss()
-#        seg_trainer = ClassTrainer(seg_model,
-#                (train_seg_loader, None),
-#                criterion=criterion,
-#                session_dir=session_dir)
-#        seg_trainer.train()
-#        print("...Done training segmentation network")
 
     retain_session_dir(session_dir)
 
@@ -181,9 +171,9 @@ if __name__ == "__main__":
                     " be retrained from scratch")
     parser.add_argument("--ae-model-only", action="store_true")
     parser.add_argument("-d", "--data-dir", type=str,
-            default=pj(HOME, "Datasets/HLS/test_imgs/hls"))
+            default=pj(HOME, "Datasets/HLS/tb_data"))
     parser.add_argument("--test-data-dir", type=str,
-            default=pj(HOME, "Datasets/HLS/test_imgs/hls"))
+            default=pj(HOME, "Datasets/HLS/tb_data"))
     parser.add_argument("--cdl-file-path", type=str,
             default=pj(HOME, "Datasets/HLS/test_imgs/cdl/" \
                     "cdl_2016_neAR_0_0_500_500.npy")) # TODO
