@@ -26,3 +26,6 @@ This will put .npy and .png files into $OUTPUT_SUPDIR/hls, including the 4D band
 python make_images.py --hls-dir $HLS_DIR --cdl $CDL_PATH -o $OUTPUT_SUPDIR -x 500 -y 1000 --image-size 750
 
 
+%%% TRAINING THE MODEL %%%
+The model trains in two steps.  First the autoencoder is trained, to take the combined spectral/temporal data and transform it into an false-color RGB image of the measured region.  Second, it runs image segmentation on the false-color image to acheive the correct classification.
+
