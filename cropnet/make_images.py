@@ -10,7 +10,7 @@ import os
 import shutil
 
 from utils import get_cdl_subregion, get_chip_bbox, get_hls_subregions_all, \
-        get_hls_subregions_by_band, get_hls_subregions_by_time, save_tb_chips
+        get_hls_subregions_by_band, save_tb_chips
 
 pe = os.path.exists
 pj = os.path.join
@@ -20,10 +20,10 @@ HOME = os.path.expanduser("~")
 g_num_spectral = 19
 g_time_start_idx = 7
 g_time_end_idx = 26
-g_hls_stub = "hls_cls_ark_time%d_band%d_%d_%d_%d_%d.npy" # TODO "ark"
+g_hls_stub = "hls_cls_%s_time%d_band%d_%d_%d_%d_%d.npy"
 
 def _hls_saver(region, path_stub, t, b, bbox):
-    path_stub = path_stub % (t, b, bbox[0], bbox[1], bbox[2], bbox[3])
+    path_stub = path_stub % (region, t, b, bbox[0], bbox[1], bbox[2], bbox[3])
     img_path_png = path_stub + ".png"
     img_path_npy = path_stub + ".npy"
     cv2.imwrite(img_path_png, region)
@@ -37,7 +37,7 @@ def _map_to_uniform_fast(band):
     b_min = np.quantile(b, 0.005)
     b_max = np.quantile(b, 0.995)
     b = np.clip( (b-b_min)/(b_max-b_min), 0.0, 1.0 )
-    return b
+    return b.reshape(*band_shape)
 
 def _map_to_uniform_old(band):
     band_shape = band.shape
@@ -53,7 +53,10 @@ def _map_to_uniform_old(band):
     return u_band
 
 
-def make_and_save_cdl(output_supdir, cdl_file, bbox):
+def get_region_from_hls_dir(path):
+    return os.path.basename( os.path.abspath(path) )
+
+def make_and_save_cdl(output_supdir, cdl_file, bbox, do_save_image=False):
     img = get_cdl_subregion(cdl_file, bbox)
     cdl_name_stub = os.path.splitext( os.path.basename(cdl_file) )[0]
     img_name_stub = cdl_name_stub + "_%d_%d_%d_%d" % (bbox[0], bbox[1], bbox[2],
@@ -63,18 +66,20 @@ def make_and_save_cdl(output_supdir, cdl_file, bbox):
     cdl_dir = pj(output_supdir, "cdl")
     if not pe(cdl_dir):
         os.makedirs(cdl_dir)
-    cv2.imwrite(pj(cdl_dir, img_name_png), img)
+    if do_save_image:
+        cv2.imwrite(pj(cdl_dir, img_name_png), img)
     np.save(pj(cdl_dir, img_name_npy), img)
 
 def make_and_save_hls(output_supdir, hls_dir, bbox):
+    region = get_region_from_hls_dir(hls_dir)
     hls_out_dir = pj(output_supdir, "hls")
     if not pe(hls_out_dir):
         os.makedirs(hls_out_dir)
-    path_stub = pj(hls_out_dir, "hls_cls_ark_time%d_band%d_%d_%d_%d_%d")
-    saver = lambda region,t,b : _hls_saver(region, path_stub, t, b, bbox)
-    get_hls_subregions_all(hls_dir, bbox, saver)
+    path_stub = pj(hls_out_dir, "hls_cls_%s_time%d_band%d_%d_%d_%d_%d")
+    saver = lambda regn,t,b : _hls_saver(regn, path_stub, t, b, bbox)
+    get_hls_subregions_all(region, hls_dir, bbox, saver)
     
-def make_and_save_tbchips(hls_dir, bbox_src, bbox=None):
+def make_and_save_tbchips(region, hls_dir, bbox_src, bbox=None):
     if bbox is None:
         bbox = [0, 0, bbox_src[2]-bbox_src[0], bbox_src[3]-bbox_src[1]]
     hls_4d = []
@@ -82,7 +87,7 @@ def make_and_save_tbchips(hls_dir, bbox_src, bbox=None):
     for b in range(1, g_num_spectral+1):
         band = []
         for i,t in enumerate( range(g_time_start_idx, g_time_end_idx) ):
-            file_name = g_hls_stub % (t, b, bbox_src[0], bbox_src[1],
+            file_name = g_hls_stub % (region, t, b, bbox_src[0], bbox_src[1],
                     bbox_src[2], bbox_src[3])
             hls = np.load( pj(hls_dir, file_name) )
             hls_chip = hls[ bbox[0]:bbox[2], bbox[1]:bbox[3] ]
@@ -100,14 +105,17 @@ def make_and_save_tbchips(hls_dir, bbox_src, bbox=None):
         band[:,:,:] = _map_to_uniform_fast(band)
     print("...Done")
 
-    save_tb_chips(hls_dir, hls_4d, bbox_src, bbox)
+    region = get_region_from_hls_dir(hls_dir)
+    save_tb_chips(region, hls_dir, hls_4d, bbox_src, bbox)
     return hls_4d
 
 def main(args):
+    region = get_region_from_hls_dir(args.hls_dir)
     bbox = get_chip_bbox(args.image_x, args.image_y, args.image_size)
     if not args.tb_chips_only:
         make_and_save_hls(args.output_supdir, args.hls_dir, bbox)
-        make_and_save_cdl(args.output_supdir, args.ground_truth_file, bbox)
+        make_and_save_cdl(args.output_supdir, args.ground_truth_file, bbox,
+                args.save_figures)
     make_and_save_tbchips(pj(args.output_supdir, "hls"), bbox)
     print("Done, files written to %s" % (args.output_supdir))
 
@@ -130,6 +138,7 @@ if __name__ == "__main__":
     parser.add_argument("-y", "--image-y", type=int, default=0,
             help="Image left coordinate")
     parser.add_argument("--image-size", type=int, default=500)
+    parser.add_argument("--figures", dest="save_figures", action="store_true")
     args = parser.parse_args()
     main(args)
 

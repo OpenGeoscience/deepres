@@ -23,7 +23,7 @@ g_cat_pct_thresh = 0.05 # Pct in image to get recognized in legend
 g_num_spectral = 19
 g_time_start_idx = 7
 g_time_end_idx = 26
-g_hlstb_stub = "hls_tb_ark_%d_%d_%d_%d.npy" # TODO "ark"
+g_hlstb_stub = "hls_tb_%s_%d_%d_%d_%d.npy"
 
 
 # Input: file name that has exactly one substring of the form _<n>_<n>_<n>_<n>,
@@ -78,51 +78,51 @@ def get_features(model, data_loader, bbox=None):
     features = features.reshape((size_y,size_x,num_chans))
     return features
 
-def get_hls_subregions_all(hls_dir, bbox, saver=None):
+def get_hls_subregions_all(region, hls_dir, bbox, saver=None):
     timepts_at_band = []
     for b in range(1,g_num_spectral+1):
         if saver is not None:
             saver_b = lambda region,t : saver(region, t, b)
         else:
             saver_b = None
-        timepts_at_band.append( get_hls_subregions_by_band(b, hls_dir, bbox,
-            saver_b) )
+        timepts_at_band.append( get_hls_subregions_by_band(region, b, hls_dir,
+            bbox, saver_b) )
     return timepts_at_band
 
-def get_hls_subregions_by_time(timepoint, hls_dir, bbox, saver=None):
+def get_hls_subregions_by_time(region, timepoint, hls_dir, bbox, saver=None):
     regions = []
     for b in range(1,g_num_spectral+1):
-        path = pj(hls_dir, "hls_cls_ark_%02d.tif" % (b))
+        path = pj(hls_dir, "hls_cls_%s_%02d.tif" % (region, b))
         img = gdal.Open(path)
         if img is None:
             raise RuntimeError("Image %s not found" % (path))
         layer = img.GetRasterBand(timepoint)
-        region = layer.ReadAsArray()
-        region = region[ bbox[0]:bbox[2], bbox[1]:bbox[3] ]
+        region_tp = layer.ReadAsArray()
+        region_tp = region_tp[ bbox[0]:bbox[2], bbox[1]:bbox[3] ]
         if saver is not None:
-            regions.append(region)
+            regions.append(region_tp)
         else:
-            saver(region, path)
+            saver(region_tp, path)
     return regions
 
-def get_hls_subregions_by_band(band, hls_dir, bbox, saver=None):
-    path = pj(hls_dir, "hls_cls_ark_%02d.tif" % (band))
+def get_hls_subregions_by_band(region, band, hls_dir, bbox, saver=None):
+    path = pj(hls_dir, "hls_cls_%s_%02d.tif" % (region, band))
     regions = []
     img = gdal.Open(path)
     if img is None:
         raise RuntimeError("Image %s not found" % (path))
     for t in range(g_time_start_idx, g_time_end_idx):
         layer = img.GetRasterBand(t)
-        region = layer.ReadAsArray()
-        region = region[ bbox[0]:bbox[2], bbox[1]:bbox[3] ]
+        region_tp = layer.ReadAsArray()
+        region_tp = region_tp[ bbox[0]:bbox[2], bbox[1]:bbox[3] ]
         if saver is None:
-            regions.append(region)
+            regions.append(region_tp)
         else:
-            saver(region, t)
+            saver(region_tp, t)
     return regions
 
-def load_tb_chips(tbchips_dir, bbox_src, bbox=None):
-    tb_chips = np.load( pj(tbchips_dir, g_hlstb_stub % (bbox_src[0],
+def load_tb_chips(region, tbchips_dir, bbox_src, bbox=None):
+    tb_chips = np.load( pj(tbchips_dir, g_hlstb_stub % (region, bbox_src[0],
         bbox_src[1], bbox_src[2], bbox_src[3])))
     if bbox is None:
         bbox = np.zeros(4, np.int)
@@ -162,14 +162,14 @@ def make_clut(file_path=pj(HOME,
                     color_dict[cat]["name"] = name
     return color_dict
 
-def save_tb_chips(hls_dir, tb_chips, bbox_src, bbox):
+def save_tb_chips(hls_dir, region, tb_chips, bbox_src, bbox):
     bbox = list(bbox)
     bbox[0] += bbox_src[0]
     bbox[1] += bbox_src[1]
     bbox[2] += bbox_src[0]
     bbox[3] += bbox_src[1]
-    np.save( pj(hls_dir, g_hlstb_stub % (bbox[0], bbox[1], bbox[2], bbox[3])),
-            tb_chips )
+    np.save( pj(hls_dir, g_hlstb_stub % (region, bbox[0], bbox[1], bbox[2],
+        bbox[3])), tb_chips )
 
 # Convert the cdl file into an rgb image with appropriate colors and labels
 def transform_cdl(cdl):

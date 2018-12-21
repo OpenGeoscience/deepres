@@ -29,7 +29,8 @@ g_time_end_idx = 26
 g_hls_stub = "hls_cls_ark_time%d_band%d_%d_%d_%d_%d.npy" # TODO "ark"
 
 g_chip_size = 1000  # 1000x1000 pix
-g_region_subdirs = ["ark", "sd", "ohio", "vai"]
+#g_region_subdirs = ["ark", "sd", "ohio", "vai"]
+g_region_subdirs = ["sd", "ohio", "vai"] # TODO
 g_cdl_file_names = { "ark" : "cdl_2016_neAR.tif",
         "sd" : "cdl_2016_seSD.tif",
         "ohio" : "cdl_2016_nwOH.tif",
@@ -53,7 +54,7 @@ def main(args):
                 bbox = get_chip_bbox(xstart, ystart, g_chip_size)
                 make_and_save_hls(output_dir, hls_dir, bbox)
                 make_and_save_cdl(output_dir, gt_file, bbox)
-                make_and_save_tbchips(output_dir, bbox)
+                make_and_save_tbchips(pj(output_dir, "hls"), bbox)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
