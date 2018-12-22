@@ -54,7 +54,7 @@ def main(args):
                 bbox = get_chip_bbox(xstart, ystart, g_chip_size)
                 make_and_save_hls(output_dir, hls_dir, bbox)
                 make_and_save_cdl(output_dir, gt_file, bbox)
-                make_and_save_tbchips(pj(output_dir, "hls"), bbox)
+                make_and_save_tbchips(subdir, pj(output_dir, "hls"), bbox)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

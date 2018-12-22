@@ -82,7 +82,7 @@ def get_hls_subregions_all(region, hls_dir, bbox, saver=None):
     timepts_at_band = []
     for b in range(1,g_num_spectral+1):
         if saver is not None:
-            saver_b = lambda region,t : saver(region, t, b)
+            saver_b = lambda regn,t : saver(regn, t, b)
         else:
             saver_b = None
         timepts_at_band.append( get_hls_subregions_by_band(region, b, hls_dir,
@@ -162,7 +162,7 @@ def make_clut(file_path=pj(HOME,
                     color_dict[cat]["name"] = name
     return color_dict
 
-def save_tb_chips(hls_dir, region, tb_chips, bbox_src, bbox):
+def save_tb_chips(region, hls_dir, tb_chips, bbox_src, bbox):
     bbox = list(bbox)
     bbox[0] += bbox_src[0]
     bbox[1] += bbox_src[1]

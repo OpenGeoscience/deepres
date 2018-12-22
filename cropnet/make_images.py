@@ -23,7 +23,7 @@ g_time_end_idx = 26
 g_hls_stub = "hls_cls_%s_time%d_band%d_%d_%d_%d_%d.npy"
 
 def _hls_saver(region, path_stub, t, b, bbox):
-    path_stub = path_stub % (region, t, b, bbox[0], bbox[1], bbox[2], bbox[3])
+    path_stub = path_stub % (t, b, bbox[0], bbox[1], bbox[2], bbox[3])
     img_path_png = path_stub + ".png"
     img_path_npy = path_stub + ".npy"
     cv2.imwrite(img_path_png, region)
@@ -75,7 +75,8 @@ def make_and_save_hls(output_supdir, hls_dir, bbox):
     hls_out_dir = pj(output_supdir, "hls")
     if not pe(hls_out_dir):
         os.makedirs(hls_out_dir)
-    path_stub = pj(hls_out_dir, "hls_cls_%s_time%d_band%d_%d_%d_%d_%d")
+    name_with_reg = "hls_cls_" + region + "_time%d_band%d_%d_%d_%d_%d"
+    path_stub = pj(hls_out_dir, name_with_reg)
     saver = lambda regn,t,b : _hls_saver(regn, path_stub, t, b, bbox)
     get_hls_subregions_all(region, hls_dir, bbox, saver)
     
@@ -105,7 +106,6 @@ def make_and_save_tbchips(region, hls_dir, bbox_src, bbox=None):
         band[:,:,:] = _map_to_uniform_fast(band)
     print("...Done")
 
-    region = get_region_from_hls_dir(hls_dir)
     save_tb_chips(region, hls_dir, hls_4d, bbox_src, bbox)
     return hls_4d
 
@@ -116,7 +116,7 @@ def main(args):
         make_and_save_hls(args.output_supdir, args.hls_dir, bbox)
         make_and_save_cdl(args.output_supdir, args.ground_truth_file, bbox,
                 args.save_figures)
-    make_and_save_tbchips(pj(args.output_supdir, "hls"), bbox)
+    make_and_save_tbchips(region, pj(args.output_supdir, "hls"), bbox)
     print("Done, files written to %s" % (args.output_supdir))
 
 
