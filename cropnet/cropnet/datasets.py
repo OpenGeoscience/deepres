@@ -2,6 +2,7 @@
 Datasets for cropnet
 """
 
+import abc
 import argparse
 import csv
 import cv2
@@ -39,33 +40,82 @@ else:
     DATA = "/media/data"
 
 
+# Base class
+class CropNetBase(Dataset):
+    def __init__(self, data_dir, labels_dir, tiles_per_cohort=10, **kwargs):
+        super().__init__(kwargs)
+        self._cohort_ct = None
+        self._data_dir = data_dir
+        self._data_chunks = None
+        self._data_paths = None
+        self._labels_dir = labels_dir
+        self._labels_imgs = None
+        self._labels_paths = None
+        self._tile_cohorts = None
+        self._tiles_per_cohort = tiles_per_cohort
+
+        self._get_data_paths()
+        self._init_cohorts()
+        self._load_new_cohort()
+
+    def _get_chunk_and_label(self, index):
+        idx = index % self._tiles_per_cohort
+        return self._data_chunks[idx], self._labels_imgs[idx]
+
+#    @abc.abstractmethod
+    def _get_paths(self):
+        dd = self._data_dir
+        self._data_paths = [pj(dd,f) for f in os.listdir(dd)]
+        ld = self._labels_dir
+        self._labels_paths = [pj(ld,f) for f in os.listdir(ld)]
+        if len(self._data_paths) != len(self._labels_paths):
+            raise RuntimeError("Different number of files in %s and %s" \
+                    % (self._data_dir, self._labels_dir))
+        # TODO Ensure that the labels files correspond exactly to the data 
+        # files, don't rely on consistent alphabetization
+
+    def _init_cohorts(self):
+        N = len(self._data_paths)
+        idxs = list(range(N))
+        np.random.shuffle(idxs)
+        self._tile_cohorts = []
+        for i in range(N//self._tiles_per_cohort):
+            self._tile_cohorts.append( idxs[:self._tiles_per_cohort] )
+            idxs = idxs[self._tiles_per_cohort:]
+        if len(idxs)>0:
+            rem = self._tiles_per_cohort - len(idxs)
+            rem_idxs = list(range(N))
+            np.random.shuffle(rem_idxs)
+            idxs += rem_idxs[:rem]
+            self._tile_cohorts.append(idxs)
+        self._cohort_ct = 0
+
+    def _load_new_cohort(self):
+        print("Loading next cohort of %d images and labels ..." \
+                % (self._tiles_per_cohort))
+        idxs = self._tile_cohorts[ self._cohort_ct ]
+        self._data_chunks = []
+        self._labels_imgs = []
+        for idx in idxs:
+            self._data_chunks.append( np.load(self._data_paths[idx]) )
+            self._labels_imgs.append( np.load(self._labels_paths[idx]) )
+        self._cohort_ct += 1
+        print("...Done")
+        if self._cohort_ct == len(self._tile_cohorts):
+            self._init_cohorts()
+
 # 224x224 patches to feed into pre-trained ResNet, classifying whole patch 
-class RGBPatches(Dataset):
-    def __init__(self, data_dir_or_file, labels_dir_or_file, cats_dict={},
-            ingest_patch_size=224, mode="test"):
+class RGBPatches(CropNetBase):
+    def __init__(self, cats_dict={}, ingest_patch_size=224, mode="test", 
+            **kwargs):
+        super().__init__(**kwargs)
         self._cats_dict = cats_dict
         self._cats = [3, 4, 5, 190] # TODO--just estimated from a single chip
-        self._data_dir = None
-        self._data_img = None
         self._img_ht = None
         self._img_wd = None
         self._ingest_patch_size = ingest_patch_size
         self._label_mode = None
-        self._labels_dir = None
-        self._labels_img = None
         self._mode = mode
-
-        if os.path.isdir(data_dir_or_file):
-            self._data_dir = data_dir_or_file
-            raise NotImplementedError()
-        else:
-            self._load_rgb(data_dir_or_file)
-
-        if os.path.isdir(labels_dir_or_file):
-            self._data_dir = labels_dir_or_file
-            raise NotImplementedError()
-        else:
-            self._load_labels(labels_dir_or_file)
 
     def __getitem__(self, index):
         i = index % (self._img_ht // self._ingest_patch_size)
@@ -116,22 +166,24 @@ class RGBPatches(Dataset):
     def get_num_cats(self):
         return len(self._cats) + 1
 
-    def _load_labels(self, data_npy_file):
-        print("Loading labels file %s ..." % (data_npy_file))
-        self._labels_img = np.load(data_npy_file)
-        if self._labels_img is None:
-            raise RuntimeError("Image file %s does not exist or is not a valid"\
-                    " image")
-        print("...Done.  Shape is %s" % repr(self._labels_img.shape))
-
-    def _load_rgb(self, data_npy_file):
-        print("Loading rgb file %s ..." % (data_npy_file))
-        self._data_img = np.load(data_npy_file)
-        if self._data_img is None:
-            raise RuntimeError("Image file %s does not exist or is not a valid"\
-                    " image")
-        self._img_ht,self._img_wd = self._data_img.shape[:2]
-        print("...Done.  Shape is %s" % repr(self._data_img.shape))
+#
+#
+#    def _load_labels(self, data_npy_file):
+#        print("Loading labels file %s ..." % (data_npy_file))
+#        self._labels_img = np.load(data_npy_file)
+#        if self._labels_img is None:
+#            raise RuntimeError("Image file %s does not exist or is not a valid"\
+#                    " image")
+#        print("...Done.  Shape is %s" % repr(self._labels_img.shape))
+#
+#    def _load_rgb(self, data_npy_file):
+#        print("Loading rgb file %s ..." % (data_npy_file))
+#        self._data_img = np.load(data_npy_file)
+#        if self._data_img is None:
+#            raise RuntimeError("Image file %s does not exist or is not a valid"\
+#                    " image")
+#        self._img_ht,self._img_wd = self._data_img.shape[:2]
+#        print("...Done.  Shape is %s" % repr(self._data_img.shape))
 
 
 # 224x224 patches to feed into pre-trained ResNet, classifying center pixel
@@ -213,27 +265,22 @@ class RGBPatchesCenter(Dataset):
 
 
 # Time-Band Chips, where Band is spectral band
-class TBChips(Dataset):
-    def __init__(self, data_dir_or_file, src_image_x=0, src_image_y=0, 
-            src_image_size=500):
-        self._data_dir = None
-        self._data_npy_file = None
+class TBChips(CropNetBase):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self._N = None
         self._src_image_x = src_image_x
         self._src_image_y = src_image_y
         self._src_image_size = src_image_size
-        self._tb_chips = None # We're going to hold these in memory for now
 
-        if os.path.isdir(data_dir_or_file):
-            self._data_dir = data_dir_or_file
-            self._get_tb_chips()
-        else:
-            self._load_tb_chips_from_npy(data_dir_or_file)
+        self._get_tb_chips()
 
     def __getitem__(self, index):
-        i = index // self._src_image_size
-        j = index % self._src_image_size
-        tb_chip = np.squeeze( self._tb_chips[:,:,i,j] )
+        chunk,_ = self._get_chunk_and_label(index)
+        ht,wd = chunk.shape[2:]
+        i = index // ht
+        j = index % ht
+        tb_chip = np.squeeze( chunk[:,:,i,j] )
         tb_chip = torch.FloatTensor(tb_chip).unsqueeze(0)
         return tb_chip,tb_chip
 
