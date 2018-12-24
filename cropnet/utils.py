@@ -26,10 +26,17 @@ g_time_end_idx = 26
 g_hlstb_stub = "hls_tb_%s_%d_%d_%d_%d.npy"
 
 
+# Input:
+#   bbox: A bounding box in (x0,y0,x1,y1) format
+# Output:
+#   The area of the bounding box
+def bbox_area(bbox):
+    return (bbox[2] - bbox[0]) * (bbox[3] - bbox[1])
+
 # Input: file name that has exactly one substring of the form _<n>_<n>_<n>_<n>,
 # corresponding to a [x0, y0, x1, y1] bounding box.
-def get_bbox_from_file_name(file_name):
-    file_name = os.path.basename(file_name)
+def get_bbox_from_file_path(file_path):
+    file_name = os.path.basename( os.path.abspath(file_path) )
     match = re.search(r"_\d+_\d+_\d+_\d+", file_name)
     if match is None:
         raise RuntimeError("Incorrect format of file name %s, must contain " \

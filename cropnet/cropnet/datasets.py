@@ -24,7 +24,8 @@ from torch.utils.data import DataLoader
 # ml_utils imports
 
 # local imports
-from utils import get_chip_bbox, load_tb_chips, make_clut, transform_cdl
+from utils import (get_chip_bbox, load_tb_chips, make_clut, transform_cdl,
+        get_bbox_from_file_path, bbox_area)
 
 
 logging.getLogger("PIL").setLevel(logging.WARNING)
@@ -42,8 +43,9 @@ else:
 
 # Base class
 class CropNetBase(Dataset):
-    def __init__(self, data_dir, labels_dir, tiles_per_cohort=10, **kwargs):
-        super().__init__(kwargs)
+    def __init__(self, data_dir=None, labels_dir=None, tiles_per_cohort=10,
+            **kwargs):
+        super().__init__(**kwargs)
         self._cohort_ct = None
         self._data_dir = data_dir
         self._data_chunks = None
@@ -51,26 +53,43 @@ class CropNetBase(Dataset):
         self._labels_dir = labels_dir
         self._labels_imgs = None
         self._labels_paths = None
+        self._N = None
         self._tile_cohorts = None
         self._tiles_per_cohort = tiles_per_cohort
 
-        self._get_data_paths()
+        if self._data_dir is None:
+            raise RuntimeError("Data directory not specified")
+
+        self._get_paths()
         self._init_cohorts()
         self._load_new_cohort()
+        self._calc_N()
+
+    def __len__(self):
+        return self._N
+
+    def num_chunks(self):
+        return len(self._data_paths)
 
     def _get_chunk_and_label(self, index):
         idx = index % self._tiles_per_cohort
-        return self._data_chunks[idx], self._labels_imgs[idx]
+        labels_img = None if self._labels_dir is None \
+                else self._labels_imgs[idx]
+        return self._data_chunks[idx], labels_img
 
-#    @abc.abstractmethod
+    @abc.abstractmethod
+    def _calc_N(self):
+        pass
+
     def _get_paths(self):
         dd = self._data_dir
         self._data_paths = [pj(dd,f) for f in os.listdir(dd)]
-        ld = self._labels_dir
-        self._labels_paths = [pj(ld,f) for f in os.listdir(ld)]
-        if len(self._data_paths) != len(self._labels_paths):
-            raise RuntimeError("Different number of files in %s and %s" \
-                    % (self._data_dir, self._labels_dir))
+        if self._labels_dir is not None:
+            ld = self._labels_dir
+            self._labels_paths = [pj(ld,f) for f in os.listdir(ld)]
+            if len(self._data_paths) != len(self._labels_paths):
+                raise RuntimeError("Different number of files in %s and %s" \
+                        % (self._data_dir, self._labels_dir))
         # TODO Ensure that the labels files correspond exactly to the data 
         # files, don't rely on consistent alphabetization
 
@@ -98,7 +117,8 @@ class CropNetBase(Dataset):
         self._labels_imgs = []
         for idx in idxs:
             self._data_chunks.append( np.load(self._data_paths[idx]) )
-            self._labels_imgs.append( np.load(self._labels_paths[idx]) )
+            if self._labels_dir is not None:
+                self._labels_imgs.append( np.load(self._labels_paths[idx]) )
         self._cohort_ct += 1
         print("...Done")
         if self._cohort_ct == len(self._tile_cohorts):
@@ -268,24 +288,16 @@ class RGBPatchesCenter(Dataset):
 class TBChips(CropNetBase):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self._N = None
-        self._src_image_x = src_image_x
-        self._src_image_y = src_image_y
-        self._src_image_size = src_image_size
-
-        self._get_tb_chips()
 
     def __getitem__(self, index):
         chunk,_ = self._get_chunk_and_label(index)
+        index = index // self.num_chunks()
         ht,wd = chunk.shape[2:]
         i = index // ht
         j = index % ht
         tb_chip = np.squeeze( chunk[:,:,i,j] )
         tb_chip = torch.FloatTensor(tb_chip).unsqueeze(0)
         return tb_chip,tb_chip
-
-    def __len__(self):
-        return self._N
 
     def get_data(self):
         return self._tb_chips
@@ -295,13 +307,12 @@ class TBChips(CropNetBase):
         x1,y1 = x0+self._src_image_size,y0+self._src_image_size
         return (x0,y0,x1,y1)
 
-    def _get_tb_chips(self):
-        src_bbox = get_chip_bbox(self._src_image_x, self._src_image_y, 
-                self._src_image_size)
-        self._tb_chips = load_tb_chips(self._data_dir, src_bbox)
-        # TODO load_tb_chips does virtually exactly what the version here does, 
-        # just loads the npy file directly.  Doesn't create it
-        self._N = self._tb_chips.shape[2] * self._tb_chips.shape[3]
+    def _calc_N(self):
+        acc = 0
+        for p in self._data_paths:
+            bbox = get_bbox_from_file_path(p)
+            acc += bbox_area(bbox)
+        self._N = int(acc)
 
     def _load_tb_chips_from_npy(self, data_file):
         full_tb_chips = np.load(data_file)
@@ -350,11 +361,31 @@ def _test_main(args):
             cv2.imwrite(pj(output_dir, "patch_%03d.png" % (i)), patch)
             cv2.imwrite(pj(output_dir, "label_%03d.png" % (i)), label)
         print("...Done")
+    elif args.test == "TBChips":
+        print("Testing TBChips...")
+        tiles_per_cohort = 2
+        print("Tiles per cohort: %d" % (tiles_per_cohort))
+        dataset = TBChips(data_dir=args.data_dir_or_file, labels_dir=None,
+                tiles_per_cohort=tiles_per_cohort)
+        N = len(dataset)
+        print("The length of %s is %d." % (args.test, N))
+        output_dir = pj(args.output_supdir, args.test)
+        if not pe(output_dir):
+            os.makedirs(output_dir)
+        num_examples = 20
+        inc = N // num_examples
+        for i in range(num_examples):
+            tb_chip,_ = dataset[i*inc]
+            tb_chip = np.transpose( tb_chip.cpu().data.numpy()*255.0, (1,2,0) )
+            chip_path = pj(output_dir, "tb_chip_%03d.png" % (i))
+            cv2.imwrite(chip_path, tb_chip)
+            print("Wrote chip %d, %s" % (i, chip_path))
+        print("...Done")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-t", "--test", type=str, default="RGBPatches",
-            choices=["RGBPatches"])
+            choices=["RGBPatches", "TBChips"])
     parser.add_argument("-d", "--data-dir-or-file", type=str,
             default=pj(HOME, "Training/cropnet/sessions/session_07/feats.npy"))
     parser.add_argument("-l", "--labels-dir-or-file", type=str,
