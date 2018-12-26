@@ -61,12 +61,12 @@ def get_cats(cdl_file_path):
             cats.append(i)
     return cats
 
-def get_data_loader(data_dir, image_x, image_y, image_size, batch_size):
-    dataset = TBChips(data_dir, image_x, image_y, image_size)
+def get_data_loader(data_dir, batch_size, num_workers):
+    dataset = TBChips(data_dir=data_dir, tiles_per_cohort=5)
     train_loader = DataLoader(dataset=dataset,
                                   batch_size=batch_size,
                                   shuffle=True,
-                                  num_workers=8)
+                                  num_workers=num_workers)
     return train_loader # TODO test loader!!
 
 def get_optimizer(model, opt_name, lr):
@@ -78,7 +78,8 @@ def get_optimizer(model, opt_name, lr):
         raise RuntimeError("Unrecognized optimizer, %s" % (opt_name))
     return optimizer
 
-def get_seg_loader(feats_file_path, cdl_file_path, batch_size, cats):
+def get_seg_loader(feats_file_path, cdl_file_path, batch_size, cats,
+        num_workers):
     cats_dict = OrderedDict()
     for i,c in enumerate(cats):
         cats_dict[c] = i+1 # Reserve 0 for background category
@@ -86,7 +87,7 @@ def get_seg_loader(feats_file_path, cdl_file_path, batch_size, cats):
     train_loader = DataLoader(dataset=dataset,
                                 batch_size=batch_size,
                                 shuffle=True,
-                                num_workers=8)
+                                num_workers=num_workers)
     return train_loader # TODO test loader
 
 
@@ -96,7 +97,7 @@ def loss_function(model_output, x, chip_size):
     size_sq = chip_size*chip_size
     recon_x = recon_x.view(-1, size_sq)
     x = x.view(-1, size_sq)
-    BCE = F.binary_cross_entropy(recon_x, x, size_average=False)
+    BCE = F.binary_cross_entropy(recon_x, x, reduction="sum")
 
     # see Appendix B from VAE paper:
     # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
@@ -118,10 +119,10 @@ def main(args):
     test_ae_loader = None
     ae_model = None
     if args.ae_model_path is None:
-        train_ae_loader = get_data_loader(args.data_dir, args.src_image_x, 
-                args.src_image_y, args.src_image_size, args.batch_size)
-        test_ae_loader = get_data_loader(args.test_data_dir, args.test_image_x,
-                args.test_image_y, args.test_image_size, args.batch_size)
+        train_ae_loader = get_data_loader(args.data_dir, args.batch_size,
+                num_workers=args.num_workers)
+        test_ae_loader = get_data_loader(args.test_data_dir, args.batch_size,
+                num_workers=args.num_workers)
         ae_model = make_ae_model(args.network, 19, 3) # TODO
         ae_trainer = AETrainer(
                 model=ae_model,
@@ -136,10 +137,12 @@ def main(args):
                 % (num_cats))
         if ae_model is None:
             ae_model = load_ae_model(args.ae_model_path, args.network, 
-                    chip_size=19, bneck_size=3) # TODO
+                    chip_size=19, bneck_size=3, num_workers=args.num_workers)
+                     # TODO
         if test_ae_loader is None:
             test_ae_loader = get_data_loader(args.data_dir, args.src_image_x, 
-                    args.src_image_y, args.src_image_size, args.batch_size)
+                    args.src_image_y, args.src_image_size, args.batch_size,
+                    num_workers=args.num_workers)
         features = get_features(ae_model, test_ae_loader) # TODO this should 
             # operate over an entire directory
         feats_path = pj(session_dir, "feats.npy")
@@ -157,9 +160,9 @@ if __name__ == "__main__":
                     " be retrained from scratch")
     parser.add_argument("--ae-model-only", action="store_true")
     parser.add_argument("-d", "--data-dir", type=str,
-            default=pj(HOME, "Datasets/HLS/tb_data"))
+            default=pj(HOME, "Datasets/HLS/tb_data/train/hls"))
     parser.add_argument("--test-data-dir", type=str,
-            default=pj(HOME, "Datasets/HLS/tb_data"))
+            default=pj(HOME, "Datasets/HLS/tb_data/test/hls"))
     parser.add_argument("--cdl-file-path", type=str,
             default=pj(HOME, "Datasets/HLS/test_imgs/cdl/" \
                     "cdl_2016_neAR_0_0_500_500.npy")) # TODO
@@ -183,6 +186,7 @@ if __name__ == "__main__":
     parser.add_argument("--opt-name", type=str, default="Adam",
             choices=["Adam", "SGD"])
     parser.add_argument("--batch-size", type=int, default=64)
+    parser.add_argument("--num-workers", type=int, default=8)
     
     args = parser.parse_args()
     main(args)

@@ -50,6 +50,7 @@ class CropNetBase(Dataset):
         self._data_dir = data_dir
         self._data_chunks = None
         self._data_paths = None
+        self._item_ct = None
         self._labels_dir = labels_dir
         self._labels_imgs = None
         self._labels_paths = None
@@ -67,6 +68,13 @@ class CropNetBase(Dataset):
 
     def __len__(self):
         return self._N
+
+    def check_for_cohort_update(self):
+        if self._item_ct >= self.items_per_cohort():
+            self._load_new_cohort()
+
+    def items_per_cohort(self):
+        return self._N // len(self._tile_cohorts)
 
     def num_chunks(self):
         return len(self._data_paths)
@@ -120,29 +128,34 @@ class CropNetBase(Dataset):
             if self._labels_dir is not None:
                 self._labels_imgs.append( np.load(self._labels_paths[idx]) )
         self._cohort_ct += 1
+        self._item_ct = 0
         print("...Done")
         if self._cohort_ct == len(self._tile_cohorts):
             self._init_cohorts()
+
+    def _update_item_ct(self):
+        self._item_ct += 1
 
 # 224x224 patches to feed into pre-trained ResNet, classifying whole patch 
 class RGBPatches(CropNetBase):
     def __init__(self, cats_dict={}, ingest_patch_size=224, mode="test", 
             **kwargs):
-        super().__init__(**kwargs)
+        super().__init__(tiles_per_cohort=100, **kwargs)
         self._cats_dict = cats_dict
         self._cats = [3, 4, 5, 190] # TODO--just estimated from a single chip
-        self._img_ht = None
-        self._img_wd = None
         self._ingest_patch_size = ingest_patch_size
         self._label_mode = None
         self._mode = mode
 
     def __getitem__(self, index):
+        chunk,label = self._get_chunk_and_label(index)
+        index = index // self.num_chunks()
+
         i = index % (self._img_ht // self._ingest_patch_size)
         j = index // (self._img_ht // self._ingest_patch_size)
         
         sz = self._ingest_patch_size
-        if self._mode=="train":
+        if self._mode=="train": # TODO pre-calculate
             io,jo = (torch.rand(2).data - 0.5) / 2.0
             i_beg = i * sz + io*sz
             j_beg = j * sz + jo*sz
@@ -176,15 +189,18 @@ class RGBPatches(CropNetBase):
         transform = tv.transforms.ToTensor()
         return transform(patch),label 
 
-    def __len__(self):
-        return (self._img_ht // self._ingest_patch_size) \
-                    * (self._img_wd // self._ingest_patch_size)
+#    def __len__(self):
+#        return (self._img_ht // self._ingest_patch_size) \
+#                    * (self._img_wd // self._ingest_patch_size)
 
     def get_cats_dict(self):
         return self._cats_dict
 
     def get_num_cats(self):
         return len(self._cats) + 1
+
+    def _calc_N(self):
+        pass
 
 #
 #
@@ -297,6 +313,7 @@ class TBChips(CropNetBase):
         j = index % ht
         tb_chip = np.squeeze( chunk[:,:,i,j] )
         tb_chip = torch.FloatTensor(tb_chip).unsqueeze(0)
+        self._update_item_ct()
         return tb_chip,tb_chip
 
     def get_data(self):
@@ -342,8 +359,9 @@ def _test_main(args):
     if args.test == "RGBPatches":
         print("Testing RGBPatches...")
         cats_dict = make_clut()
-        dataset = RGBPatches(args.data_dir_or_file, args.labels_dir_or_file, 
-                mode="train", cats_dict=cats_dict)
+        dataset = RGBPatches(data_dir=args.data_dir_or_file,
+                labels_dir=args.labels_dir_or_file, mode="train",
+                cats_dict=cats_dict)
         num_cats = dataset.get_num_cats()
         inc = 256 // num_cats
         print("The length of %s is %d." % (args.test, len(dataset)))
@@ -370,16 +388,18 @@ def _test_main(args):
         N = len(dataset)
         print("The length of %s is %d." % (args.test, N))
         output_dir = pj(args.output_supdir, args.test)
+        print("Test chips written to %s" % (output_dir))
         if not pe(output_dir):
             os.makedirs(output_dir)
-        num_examples = 20
-        inc = N // num_examples
-        for i in range(num_examples):
+        inc = N // args.num_outputs
+        for i in range(args.num_outputs):
             tb_chip,_ = dataset[i*inc]
-            tb_chip = np.transpose( tb_chip.cpu().data.numpy()*255.0, (1,2,0) )
+            tb_chip = tb_chip.cpu().data.numpy()
+            print("Writing chip %d, (shape, min, max): %s, %f, %f" \
+                    % (i, tb_chip.shape, np.min(tb_chip), np.max(tb_chip)))
+            tb_chip = np.transpose(tb_chip*255.0, (1,2,0) )
             chip_path = pj(output_dir, "tb_chip_%03d.png" % (i))
             cv2.imwrite(chip_path, tb_chip)
-            print("Wrote chip %d, %s" % (i, chip_path))
         print("...Done")
 
 if __name__ == "__main__":

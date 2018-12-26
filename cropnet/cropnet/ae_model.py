@@ -64,7 +64,7 @@ class CropNetFCAE(nn.Module):
     def _decode(self, z):
         z = F.relu( self.fc3(z) )
         z = F.relu( self.fc4(z) )
-        z = F.sigmoid( self.fc5(z) )
+        z = torch.sigmoid( self.fc5(z) )
         return z
 
     def _encode(self, x):
