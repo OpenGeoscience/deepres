@@ -359,9 +359,8 @@ def _test_main(args):
     if args.test == "RGBPatches":
         print("Testing RGBPatches...")
         cats_dict = make_clut()
-        dataset = RGBPatches(data_dir=args.data_dir_or_file,
-                labels_dir=args.labels_dir_or_file, mode="train",
-                cats_dict=cats_dict)
+        dataset = RGBPatches(data_dir=args.data_dir, labels_dir=args.labels_dir,
+                mode="train", cats_dict=cats_dict)
         num_cats = dataset.get_num_cats()
         inc = 256 // num_cats
         print("The length of %s is %d." % (args.test, len(dataset)))
@@ -406,11 +405,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-t", "--test", type=str, default="RGBPatches",
             choices=["RGBPatches", "TBChips"])
-    parser.add_argument("-d", "--data-dir-or-file", type=str,
-            default=pj(HOME, "Training/cropnet/sessions/session_07/feats.npy"))
-    parser.add_argument("-l", "--labels-dir-or-file", type=str,
-            default=pj(DATA, "Datasets/HLS/test_imgs/cdl/" \
-                    "cdl_2016_neAR_0_0_500_500.npy"))
+    parser.add_argument("-d", "--data-dir", type=str,
+            default=pj(HOME, "Training/cropnet/sessions/session_07/feats_maps"))
+    parser.add_argument("-l", "--labels-dir", type=str,
+            default=pj(DATA, "Datasets/HLS/tb_data/train/cdl"))
     parser.add_argument("-o", "--output-supdir", type=str, 
             default=pj(HOME, "Training/cropnet/test_out"))
     parser.add_argument("-n", "--num-outputs", type=int, default=20)

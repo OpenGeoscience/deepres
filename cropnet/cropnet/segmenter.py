@@ -86,7 +86,8 @@ if __name__ == "__main__":
     parser.add_argument("--mp", "--model-path", dest="model_path", type=str,
             default=pj(HOME, "Training/cropnet/models/seg_model.pkl"))
     parser.add_argument("-d", "--data-dir-or-file", type=str,
-            default=pj(HOME, "Training/cropnet/sessions/session_07/feats.npy"))
+            default=pj(HOME, "Training/cropnet/sessions/session_07/feats_maps/"\
+                    "feats.npy"))
     parser.add_argument("-l", "--labels-dir-or-file", type=str,
             default=pj(DATA, "Datasets/HLS/test_imgs/cdl/" \
                     "cdl_2016_neAR_0_0_500_500.npy"))
