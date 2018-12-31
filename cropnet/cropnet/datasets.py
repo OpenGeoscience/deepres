@@ -137,38 +137,38 @@ class CropNetBase(Dataset):
         self._item_ct += 1
 
 # 224x224 patches to feed into pre-trained ResNet, classifying whole patch 
+# For this dataset the rgb images should be stitched together, i.e. combine
+# all rgb feature outputs from a given area subject to memory constraints
 class RGBPatches(CropNetBase):
-    def __init__(self, cats_dict={}, ingest_patch_size=224, mode="test", 
+    def __init__(self, cats={}, ingest_patch_size=224, mode="test", 
             **kwargs):
         super().__init__(tiles_per_cohort=100, **kwargs)
-        self._cats_dict = cats_dict
         self._cats = [3, 4, 5, 190] # TODO--just estimated from a single chip
         self._ingest_patch_size = ingest_patch_size
         self._label_mode = None
         self._mode = mode
 
     def __getitem__(self, index):
-        chunk,label = self._get_chunk_and_label(index)
-        index = index // self.num_chunks()
+        rgb,label = self._get_chunk_and_label(index)
+        ht,wd = rgb.shape[:2]
 
-        i = index % (self._img_ht // self._ingest_patch_size)
-        j = index // (self._img_ht // self._ingest_patch_size)
-        
-        sz = self._ingest_patch_size
         if self._mode=="train": # TODO pre-calculate
-            io,jo = (torch.rand(2).data - 0.5) / 2.0
-            i_beg = i * sz + io*sz
-            j_beg = j * sz + jo*sz
-            i_beg = int( i_beg.clamp(0.0, self._img_ht - sz) )
-            j_beg = int( j_beg.clamp(0.0, self._img_wd - sz) )
+            i_beg,j_beg,i_end,j_end = self._get_rand_bbox(ht,wd)
         else:
+            # TODO accommodate a different # of chips per chunk
+            # Right now assuming nice square chunks (rgb images)
+            index = index % (ht * wd)
+            sz = self._ingest_patch_size
+            i = index % (ht // sz)
+            j = index // (ht // sz)
             i_beg = i * sz
             j_beg = j * sz
-        i_end = i_beg + sz
-        j_end = j_beg + sz
+            i_end = i_beg + sz
+            j_end = j_beg + sz
+
         patch = self._data_img[i_beg:i_end, j_beg:j_end]
         patch = np.copy(patch)
-        for k in range(patch.shape[2]):
+        for k in range(patch.shape[2]): # TODO take care of this in stitching
             c = patch[:,:,k]
             patch[:,:,k] = (c - np.min(c)) / (np.max(c) - np.min(c))
         raw_label = self._labels_img[i_beg:i_end, j_beg:j_end]
@@ -176,7 +176,6 @@ class RGBPatches(CropNetBase):
 
         bgnd_mask = np.ones_like(label) > 0
         ct = 1
-#        for k,v in self._cats_dict.items():
         for k in self._cats:
             mask_k = raw_label==k
             label[mask_k] = ct
@@ -189,19 +188,28 @@ class RGBPatches(CropNetBase):
         transform = tv.transforms.ToTensor()
         return transform(patch),label 
 
-#    def __len__(self):
-#        return (self._img_ht // self._ingest_patch_size) \
-#                    * (self._img_wd // self._ingest_patch_size)
-
-    def get_cats_dict(self):
-        return self._cats_dict
-
     def get_num_cats(self):
         return len(self._cats) + 1
 
+    # Currently this throws out the outer border, whatever exceeds n*sz pix
     def _calc_N(self):
-        pass
+        acc = 0
+        sz = self._ingest_patch_size
+        self._chips_per_chunk = []
+        for p in self._data_paths:
+            wd,ht = Image.open(p).shape
+            n_wd = wd // sz
+            n_ht = ht // sz
+            self._chips_per_chunk.append(n_wd*n_ht)
+            acc += n_wd * n_ht
+        self._N = acc
 
+    def _get_rand_bbox(self, ht, wd):
+        sz = self._ingest_patch_size
+        x,y = torch.rand(2).data
+        i_beg = int( x*(wd-sz) )
+        j_beg = int( y*(ht-sz) )
+        return i_beg,j_beg,i_beg+sz,j_beg+sz
 #
 #
 #    def _load_labels(self, data_npy_file):
@@ -358,9 +366,8 @@ def _test_main(args):
 
     if args.test == "RGBPatches":
         print("Testing RGBPatches...")
-        cats_dict = make_clut()
         dataset = RGBPatches(data_dir=args.data_dir, labels_dir=args.labels_dir,
-                mode="train", cats_dict=cats_dict)
+                mode="train")
         num_cats = dataset.get_num_cats()
         inc = 256 // num_cats
         print("The length of %s is %d." % (args.test, len(dataset)))
