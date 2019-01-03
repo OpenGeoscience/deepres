@@ -2,6 +2,7 @@
 The RN-VAE for encoding crop data as RGB values
 """
 
+import argparse
 import torch
 import torch.nn as nn
 import torchvision as tv
@@ -35,6 +36,8 @@ class CropNetFCAE(nn.Module):
         self._name = "cropnetfcae"
 
         chip_size_sq = chip_size * chip_size
+
+    
 
         self.fc1 = nn.Linear(chip_size_sq, 100)
         self.fc2 = nn.Linear(100, 20)
@@ -176,7 +179,7 @@ class ResBlock(nn.Module):
 class CropNetAE(nn.Module):
     def __init__(self, chip_size=32, num_rn_blocks=2, conv_per_rn=2,
             base_nchans=64, bneck_size=3, share_weights=True):
-        super(DenoRVAE, self).__init__()
+        super().__init__()
 
         self._base_nchans = base_nchans
         self._bneck_size = bneck_size
@@ -186,9 +189,11 @@ class CropNetAE(nn.Module):
         self._encoder = None
         self._num_rn_blocks = num_rn_blocks
 
-        self._encoder = self._make_encoder()
-
-
+#        self._encoder = self._make_encoder()
+#
+#
+        num_conv_blocks = num_rn_blocks # TODO Was starting to make this ResNet-
+        # based
 
         self._conv_out_dim = None
         self._conv_out_sz = None
@@ -267,3 +272,27 @@ class CropNetAE(nn.Module):
             W = torch.FloatTensor(c_out, c_in, ksz, ksz)
             self._Ws.append( Parameter(W) )
 
+
+
+def _test_main(args):
+    sz = args.chip_size
+    if args.model == "CropNetAE":
+        model = CropNetAE(chip_size=sz)
+    elif args.model == "CropNetFCAE":
+        model = CropNetFCAE()
+    else:
+        raise NotImplementedError()
+    print("Using model %s" % (args.model))
+    x = torch.FloatTensor(sz, sz).uniform_()
+    print("x shape: %s" % repr(x.shape))
+    yhat,mu,logvar = model(x)
+    print("yhat shape: %s, mu shape %s, logvar shape %s" \
+            % (yhat.shape, mu.shape, logvar.shape))
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-m", "--model", type=str, default="CropNetAE",
+            choices=["CropNetAE", "CropNetFCAE"])
+    parser.add_argument("--chip-size", type=int, default=19)
+    args = parser.parse_args()
+    _test_main(args)
