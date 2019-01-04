@@ -310,8 +310,12 @@ class RGBPatchesCenter(Dataset):
 
 # Time-Band Chips, where Band is spectral band
 class TBChips(CropNetBase):
-    def __init__(self, **kwargs):
+    def __init__(self, resize_to=-1, **kwargs):
         super().__init__(**kwargs)
+        self._resize_to = resize_to if resize_to > 0 else None
+
+        if resize_to > 0:
+            self._transform = tv.transforms.Resize(resize_to)
 
     def __getitem__(self, index):
         chunk,_ = self._get_chunk_and_label(index)
@@ -320,6 +324,11 @@ class TBChips(CropNetBase):
         i = index // ht
         j = index % ht
         tb_chip = np.squeeze( chunk[:,:,i,j] )
+        if self._resize_to is not None:
+            tb_chip = np.array( Image.fromarray(tb_chip).resize(\
+                    (self._resize_to, self._resize_to), Image.BICUBIC) )
+            tb_chip = (tb_chip - np.min(tb_chip)) \
+                    / (np.max(tb_chip) - np.min(tb_chip))
         tb_chip = torch.FloatTensor(tb_chip).unsqueeze(0)
         self._update_item_ct()
         return tb_chip,tb_chip
@@ -389,7 +398,9 @@ def _test_main(args):
         print("Testing TBChips...")
         tiles_per_cohort = 2
         print("Tiles per cohort: %d" % (tiles_per_cohort))
-        dataset = TBChips(data_dir=args.data_dir_or_file, labels_dir=None,
+        dataset = TBChips(data_dir=args.data_dir, 
+                resize_to=args.resize_to,
+                labels_dir=None,
                 tiles_per_cohort=tiles_per_cohort)
         N = len(dataset)
         print("The length of %s is %d." % (args.test, N))
@@ -419,6 +430,8 @@ if __name__ == "__main__":
     parser.add_argument("-o", "--output-supdir", type=str, 
             default=pj(HOME, "Training/cropnet/test_out"))
     parser.add_argument("-n", "--num-outputs", type=int, default=20)
+    parser.add_argument("--resize-to", type=int, default=-1,
+            help="Currently for TBChips only")
     args = parser.parse_args()
     _test_main(args)
     

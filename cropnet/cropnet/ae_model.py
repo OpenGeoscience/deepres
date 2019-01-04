@@ -177,8 +177,8 @@ class ResBlock(nn.Module):
         return out
 
 class CropNetAE(nn.Module):
-    def __init__(self, chip_size=32, num_rn_blocks=2, conv_per_rn=2,
-            base_nchans=64, bneck_size=3, share_weights=True):
+    def __init__(self, chip_size=32, num_rn_blocks=4, conv_per_rn=2,
+            base_nchans=64, bneck_size=3, share_weights=False):
         super().__init__()
 
         self._base_nchans = base_nchans
@@ -187,6 +187,7 @@ class CropNetAE(nn.Module):
         self._conv_per_rn = conv_per_rn
         self._decoder = None
         self._encoder = None
+        self._name = "CropNetAE"
         self._num_rn_blocks = num_rn_blocks
 
 #        self._encoder = self._make_encoder()
@@ -256,6 +257,17 @@ class CropNetAE(nn.Module):
             self._chip_size))
         z = self.reparameterize(mu, logvar)
         return self.decode(z), mu, logvar
+
+    def get_features(self, x):
+        mu,_ = self.encode(x)
+        return mu
+
+    def get_input_size(self): # TODO Create a base class with this method, 
+            # put in pyt_utils/modelbase.py
+        return self._chip_size
+
+    def get_name(self):
+        return self._name
 
     def _make_Ws(self):
         self._Ws = []

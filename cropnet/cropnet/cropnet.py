@@ -24,7 +24,7 @@ from torchvision.utils import save_image
 from general.utils import create_session_dir, retain_session_dir
 
 # Local imports
-from ae_model import CropNetFCAE, load_ae_model
+from ae_model import CropNetAE, CropNetFCAE, load_ae_model
 from ae_trainer import AETrainer
 from datasets import RGBPatchesCenter, TBChips
 from utils import get_features
@@ -61,8 +61,9 @@ def get_cats(cdl_file_path):
             cats.append(i)
     return cats
 
-def get_data_loader(data_dir, batch_size, num_workers):
-    dataset = TBChips(data_dir=data_dir, tiles_per_cohort=5)
+def get_data_loader(data_dir, batch_size, num_workers, resize_to=32):
+    dataset = TBChips(data_dir=data_dir, resize_to=resize_to,
+            tiles_per_cohort=5)
     train_loader = DataLoader(dataset=dataset,
                                   batch_size=batch_size,
                                   shuffle=True,
@@ -110,6 +111,8 @@ def loss_function(model_output, x, chip_size):
 def make_ae_model(ae_network, chip_size, bneck_size):
     if ae_network == "CropNetFCAE":
         model = CropNetFCAE(chip_size, bneck_size)
+    elif ae_network == "CropNetAE":
+        model = CropNetAE(chip_size, bneck_size)
     else:
         raise RuntimeError("Unrecognized network %s" % (ae_network))
     return model.cuda()
@@ -120,11 +123,12 @@ def main(args):
     ae_model = None
     if args.ae_model_path is None:
         train_ae_loader = get_data_loader(args.data_dir, args.batch_size,
-                num_workers=args.num_workers)
+                resize_to=args.chip_size, num_workers=args.num_workers)
         test_ae_loader = get_data_loader(args.test_data_dir, args.batch_size,
-                num_workers=args.num_workers)
-        ae_model = make_ae_model(args.network, 19, 3) # TODO
+                resize_to=args.chip_size, num_workers=args.num_workers)
+        ae_model = make_ae_model(args.network, args.chip_size, args.bneck_size)
         ae_trainer = AETrainer(
+                input_size=args.chip_size,
                 model=ae_model,
                 loaders=(train_ae_loader, test_ae_loader),
                 session_dir=session_dir)
@@ -175,7 +179,9 @@ if __name__ == "__main__":
             help="Source chip left coordinate")
     parser.add_argument("--src-image-size", type=int, default=500)
     parser.add_argument("--network", type=str, default="CropNetFCAE",
-            choices=["CropNetFCAE", "CropSeg", "Pretrained"])
+            choices=["CropNetFCAE", "CropNetAE", "CropSeg", "Pretrained"])
+    parser.add_argument("--chip-size", type=int, default=19)
+    parser.add_argument("--bneck-size", type=int, default=3)
 
     parser.add_argument("--test-image-x", type=int, default=500,
             help="Test chip top coordinate")
