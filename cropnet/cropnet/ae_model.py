@@ -145,18 +145,32 @@ def conv_seq(Ws, is_transpose):
     seq = nn.Sequential(d) 
     return seq
 
-class ResBlock(nn.Module):
-    expansion = 1
 
-    def __init__(self, cin, c_out, stride=1, downsample=None):
+def conv3x3(in_planes, out_planes, stride=1):
+    """3x3 convolution with padding"""
+    return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
+                     padding=1, bias=False)
+
+def conv1x1(in_planes, out_planes, stride=1):
+    """1x1 convolution"""
+    return nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride, 
+            bias=False)
+
+class ResBlock(nn.Module):
+    def __init__(self, c_in, c_out, stride=2):
         super(ResBlock, self).__init__()
         self.conv1 = conv3x3(c_in, c_out, stride)
         self.bn1 = nn.BatchNorm2d(c_out)
         self.relu = nn.ReLU(inplace=True)
         self.conv2 = conv3x3(c_out, c_out)
         self.bn2 = nn.BatchNorm2d(c_out)
-        self.downsample = downsample
+        self.downsample = None
         self.stride = stride
+
+        self.downsample = nn.Sequential(
+                conv1x1(c_in, c_out, stride=stride),
+                nn.BatchNorm2d(c_out),
+            )
 
     def forward(self, x):
         residual = x
@@ -168,17 +182,15 @@ class ResBlock(nn.Module):
         out = self.conv2(out)
         out = self.bn2(out)
 
-        if self.downsample is not None:
-            residual = self.downsample(x)
+        residual = self.downsample(x)
 
         out += residual
         out = self.relu(out)
-
         return out
 
 class CropNetAE(nn.Module):
-    def __init__(self, chip_size=32, num_rn_blocks=4, conv_per_rn=2,
-            base_nchans=64, bneck_size=3, share_weights=False):
+    def __init__(self, chip_size=32, num_rn_blocks=3, conv_per_rn=2,
+            base_nchans=32, bneck_size=3, share_weights=False):
         super().__init__()
 
         self._base_nchans = base_nchans
@@ -190,26 +202,30 @@ class CropNetAE(nn.Module):
         self._name = "CropNetAE"
         self._num_rn_blocks = num_rn_blocks
 
-#        self._encoder = self._make_encoder()
-#
-#
-        num_conv_blocks = num_rn_blocks # TODO Was starting to make this ResNet-
-        # based
+        self._make_encoder()
 
-        self._conv_out_dim = None
-        self._conv_out_sz = None
-        self._lin_size = None
-        self._num_conv_blocks = num_conv_blocks
-        self._Ws = None
-
-        self._conv_out_dim = self._chip_size // (2**self._num_conv_blocks)
-        self._conv_out_sz = self._base_nchans \
-                * (2**(self._num_conv_blocks - 1))
-        self._lin_size = self._conv_out_dim * self._conv_out_dim \
-                * self._conv_out_sz
+#
+#        num_conv_blocks = num_rn_blocks # TODO Was starting to make this ResNet-
+#        # based
+#
+#        self._conv_out_dim = None
+#        self._conv_out_sz = None
+#        self._lin_size = None
+#        self._num_conv_blocks = num_conv_blocks
+#        self._Ws = None
+#
+#        self._conv_out_dim = self._chip_size // (2**self._num_conv_blocks)
+#        self._conv_out_sz = self._base_nchans \
+#                * (2**(self._num_conv_blocks - 1))
+#        self._lin_size = self._conv_out_dim * self._conv_out_dim \
+#                * self._conv_out_sz
         self._make_Ws()
-
-        self._encoder = conv_seq(self._Ws, is_transpose=False)
+#
+#        self._encoder = conv_seq(self._Ws, is_transpose=False)
+       
+        reduction = 2**self._num_rn_blocks
+        self._lin_size = self._num_rn_blocks * self._base_nchans \
+                // (reduction*reduction)
         self.bneck1 = nn.Linear(self._lin_size, self._bneck_size)
         self.bneck2 = nn.Linear(self._lin_size, self._bneck_size)
         self.fc = nn.Linear(self._bneck_size, self._lin_size)
@@ -217,11 +233,15 @@ class CropNetAE(nn.Module):
         self.sigmoid = nn.Sigmoid()
 
     def _make_encoder(self):
-        rnbs = OrderedDict()
+#        rnbs = OrderedDict()
+        rnbs = []
         for b in range(self._num_rn_blocks):
             name = "rn_enc_%d" % (b+1)
-#            rnb = ResBlock(
-            
+            c_in = 1 if b==0 else b*self._base_nchans
+            c_out = (b+1)*self._base_nchans
+            rnb = ResBlock(c_in, c_out, stride=2)
+            rnbs.append(rnb)
+        self._encoder = nn.Sequential(*rnbs)
 
     def encode(self, x):
         if g_DEBUG: print("encode")
@@ -271,10 +291,10 @@ class CropNetAE(nn.Module):
 
     def _make_Ws(self):
         self._Ws = []
-        num_back = self._num_conv_blocks // 2
-        num_front = self._num_conv_blocks - num_back
+        num_back = self._num_rn_blocks // 2
+        num_front = self._num_rn_blocks - num_back
         k_sizes = num_front * [5] + num_back * [3]
-        for i in range(self._num_conv_blocks):
+        for i in range(self._num_rn_blocks):
             if i==0:
                 c_in = 1
             else:
