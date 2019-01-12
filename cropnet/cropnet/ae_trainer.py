@@ -18,7 +18,7 @@ from pyt_utils.trainer_base import TrainerBase
 from general.utils import create_session_dir, retain_session_dir
 
 # local imports
-from ae_model import CropNetFCAE
+from ae_model import CropNetCAE, CropNetFCAE
 from datasets import TBChips
 
 pe = os.path.exists
@@ -108,7 +108,9 @@ def class_sampler(epoch, trainer):
 
 def _test_main(args):
     CHIP_SIZE = 19
-    model = CropNetFCAE(CHIP_SIZE, args.bottleneck)
+#    model = CropNetFCAE(CHIP_SIZE, args.bottleneck)
+    model = CropNetCAE(chip_size=CHIP_SIZE, bneck_size=args.bottleneck,
+            base_nchans=3)
     if args.use_cuda:
         model = model.cuda()
     output_supdir = pj(HOME, "Training/cropnet/test_out/ae_trainer/") # !! TODO

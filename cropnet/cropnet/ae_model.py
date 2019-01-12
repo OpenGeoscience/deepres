@@ -40,11 +40,13 @@ class CropNetFCAE(nn.Module):
     
 
         self.fc1 = nn.Linear(chip_size_sq, 100)
+        self.fc11 = nn.Linear(100, 100)
         self.fc2 = nn.Linear(100, 20)
         self.bneck1 = nn.Linear(20, self._bneck_size)
         self.bneck2 = nn.Linear(20, self._bneck_size)
         self.fc3 = nn.Linear(self._bneck_size, 20)
         self.fc4 = nn.Linear(20, 100)
+        self.fc44 = nn.Linear(100, 100)
         self.fc5 = nn.Linear(100, chip_size_sq)
 
     def forward(self, x):
@@ -67,12 +69,14 @@ class CropNetFCAE(nn.Module):
     def _decode(self, z):
         z = F.relu( self.fc3(z) )
         z = F.relu( self.fc4(z) )
+        z = F.relu( self.fc44(z) )
         z = torch.sigmoid( self.fc5(z) )
         return z
 
     def _encode(self, x):
         x = x.view(-1, self._chip_size * self._chip_size)
         x = F.relu( self.fc1(x) )
+        x = F.relu( self.fc11(x) )
         x = F.relu( self.fc2(x) )
         return self.bneck1(x), self.bneck2(x)
 
@@ -188,7 +192,7 @@ class ResBlock(nn.Module):
         out = self.relu(out)
         return out
 
-class CropNetAE(nn.Module):
+class CropNetRAE(nn.Module):
     def __init__(self, chip_size=32, num_rn_blocks=3, conv_per_rn=2,
             base_nchans=32, bneck_size=3, share_weights=False):
         super().__init__()
@@ -199,7 +203,7 @@ class CropNetAE(nn.Module):
         self._conv_per_rn = conv_per_rn
         self._decoder = None
         self._encoder = None
-        self._name = "CropNetAE"
+        self._name = "CropNetRAE"
         self._num_rn_blocks = num_rn_blocks
 
         self._make_encoder()
@@ -306,10 +310,120 @@ class CropNetAE(nn.Module):
 
 
 
+class CropNetCAE(nn.Module):
+    def __init__(self, chip_size=19, num_conv_blocks=3, base_nchans=32,
+            bneck_size=3):
+        super().__init__()
+
+        self._base_nchans = base_nchans
+        self._bias = True
+        self._bneck_size = bneck_size
+        self._chip_size = chip_size
+        self._decoder = None
+        self._encoder = None
+        self._name = "CropNetCAE"
+        self._num_conv_blocks = num_conv_blocks
+
+        self._make_encoder()
+        self._make_decoder()
+
+        reduction = 2**self._num_conv_blocks
+        self._lin_size = 3 * 3 * (2**(self._num_conv_blocks-1)) \
+                * self._base_nchans
+#        self._lin_size = self._num_conv_blocks * self._base_nchans \
+#                // (reduction*reduction)
+
+        self.bneck1 = nn.Linear(self._lin_size, self._bneck_size)
+        self.bneck2 = nn.Linear(self._lin_size, self._bneck_size)
+        self.fc = nn.Linear(self._bneck_size, self._lin_size)
+        self.sigmoid = nn.Sigmoid()
+
+    def _make_encoder(self):
+        lays = []
+        base = self._base_nchans
+        lays.append( nn.Conv2d(1, base, kernel_size=3, stride=2,
+                     padding=1, bias=self._bias) )
+        lays.append( nn.BatchNorm2d(base) )
+        lays.append( nn.ReLU(inplace=True) )
+        lays.append( nn.Conv2d(base, base*2, kernel_size=3, stride=2,
+                     padding=1, bias=self._bias) )
+        lays.append( nn.BatchNorm2d(base*2) )
+        lays.append( nn.ReLU(inplace=True) )
+        lays.append( nn.Conv2d(base*2, base*4, kernel_size=3, stride=2,
+                     padding=1, bias=self._bias) )
+        lays.append( nn.BatchNorm2d(base*4) )
+        lays.append( nn.ReLU(inplace=True) )
+        self._encoder = nn.Sequential(*lays)
+
+    def _make_decoder(self):
+        lays = []
+        base = self._base_nchans
+        lays.append( nn.ConvTranspose2d(base*4, base*2, kernel_size=3, stride=2,
+                     padding=1, bias=self._bias, output_padding=0) )
+        lays.append( nn.BatchNorm2d(base*2) )
+        lays.append( nn.ReLU(inplace=True) )
+        lays.append( nn.ConvTranspose2d(base*2, base, kernel_size=3, stride=2,
+                     padding=1, bias=self._bias, output_padding=1) )
+        lays.append( nn.BatchNorm2d(base) )
+        lays.append( nn.ReLU(inplace=True) )
+        lays.append( nn.ConvTranspose2d(base, 1, kernel_size=3, stride=2,
+                     padding=1, bias=self._bias, output_padding=0) )
+        lays.append( nn.BatchNorm2d(1) )
+        self._decoder = nn.Sequential(*lays)
+
+    def encode(self, x):
+        if g_DEBUG: print("encode")
+        x = self._encoder(x)
+        if g_DEBUG: print(x.shape)
+        x = x.view(-1, self._lin_size)
+        bneck1 = self.bneck1(x)
+        if g_DEBUG: print(bneck1.shape)
+        bneck2 = self.bneck2(x)
+        if g_DEBUG: print(bneck2.shape)
+        return bneck1, bneck2
+        # So returning mean (mu) and log of the variance (logvar), here
+
+    def reparameterize(self, mu, logvar):
+        if self.training:
+            std = logvar.mul(0.5).exp_()
+            eps = Variable( std.data.new(std.size()).normal_() )
+            return eps.mul(std).add_(mu)
+        else:
+            return mu
+
+    def decode(self, z):
+        if g_DEBUG: print("decode")
+        if g_DEBUG: print(z.shape)
+#        z = self.fc(z).view(-1, self._conv_out_sz, self._conv_out_dim,
+#                self._conv_out_dim)
+        z = self.fc(z).view(-1, 4*self._base_nchans, 3, 3)
+        z = self._decoder(z)
+        if g_DEBUG: print(z.shape)
+        return self.sigmoid(z).view(-1, 1, self._chip_size, self._chip_size)
+
+    def forward(self, x):
+        mu, logvar = self.encode(x.view(-1, 1, self._chip_size, 
+            self._chip_size))
+        z = self.reparameterize(mu, logvar)
+        return self.decode(z), mu, logvar
+
+    def get_features(self, x):
+        mu,_ = self.encode(x)
+        return mu
+
+    def get_input_size(self): # TODO Create a base class with this method, 
+            # put in pyt_utils/modelbase.py
+        return self._chip_size
+
+    def get_name(self):
+        return self._name
+
 def _test_main(args):
     sz = args.chip_size
-    if args.model == "CropNetAE":
-        model = CropNetAE(chip_size=sz)
+    if args.model == "CropNetCAE":
+        model = CropNetCAE(chip_size=sz)
+    if args.model == "CropNetRAE":
+        model = CropNetRAE(chip_size=sz)
     elif args.model == "CropNetFCAE":
         model = CropNetFCAE()
     else:
@@ -323,8 +437,8 @@ def _test_main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-m", "--model", type=str, default="CropNetAE",
-            choices=["CropNetAE", "CropNetFCAE"])
+    parser.add_argument("-m", "--model", type=str, default="CropNetCAE",
+            choices=["CropNetRAE", "CropNetCAE", "CropNetFCAE"])
     parser.add_argument("--chip-size", type=int, default=19)
     args = parser.parse_args()
     _test_main(args)

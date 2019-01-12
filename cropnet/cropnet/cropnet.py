@@ -24,7 +24,7 @@ from torchvision.utils import save_image
 from general.utils import create_session_dir, retain_session_dir
 
 # Local imports
-from ae_model import CropNetAE, CropNetFCAE, load_ae_model
+from ae_model import CropNetCAE, CropNetFCAE, load_ae_model
 from ae_trainer import AETrainer
 from datasets import RGBPatchesCenter, TBChips
 from utils import get_features
@@ -113,6 +113,9 @@ def make_ae_model(ae_network, chip_size, bneck_size):
         model = CropNetFCAE(chip_size, bneck_size)
     elif ae_network == "CropNetAE":
         model = CropNetAE(chip_size, bneck_size)
+    elif ae_network == "CropNetCAE":
+        model = CropNetCAE(chip_size=chip_size, bneck_size=bneck_size,
+                base_nchans=16)
     else:
         raise RuntimeError("Unrecognized network %s" % (ae_network))
     return model.cuda()
@@ -178,8 +181,9 @@ if __name__ == "__main__":
     parser.add_argument("--src-image-y", type=int, default=0,
             help="Source chip left coordinate")
     parser.add_argument("--src-image-size", type=int, default=500)
-    parser.add_argument("--network", type=str, default="CropNetFCAE",
-            choices=["CropNetFCAE", "CropNetAE", "CropSeg", "Pretrained"])
+    parser.add_argument("--network", type=str, default="CropNetCAE",
+            choices=["CropNetCAE", "CropNetFCAE", "CropNetAE", "CropSeg",
+                "Pretrained"])
     parser.add_argument("--chip-size", type=int, default=19)
     parser.add_argument("--bneck-size", type=int, default=3)
 
