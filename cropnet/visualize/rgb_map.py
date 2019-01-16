@@ -25,7 +25,7 @@ from torch.utils.data import DataLoader
 from cropnet.datasets import TBChips
 from cropnet.ae_model import load_ae_model
 from location_image import get_cdl_chip
-from utils import get_chip_bbox, get_features, get_bbox_from_file_name, \
+from utils import get_chip_bbox, get_features, get_bbox_from_file_path, \
         get_cdl_subregion, make_clut, transform_cdl
 
 pe = os.path.exists
@@ -38,17 +38,33 @@ g_green_idx = 2
 g_blue_idx = 1
 g_time_idx = 11
 
-def get_data_loader(file_name, bbox):
+def get_data_loader(region, bbox):
     sz = bbox[2] - bbox[0]
     print("Getting HLS data...")
-    tb_chips = TBChips(file_name, src_image_x=bbox[0], src_image_y=bbox[1],
-            src_image_size=sz)
+    data_dir = pj(HOME,"Datasets/HLS/tb_data/test/hls")
+    labels_dir = pj(HOME,"Datasets/HLS/tb_data/test/cdl")
+    if region=="ark":
+        data_file = "hls_tb_ark_1000_1000_2000_2000.npy"
+        labels_file = "cdl_2016_neAR_1000_1000_2000_2000.npy"
+    elif region=="ohio":
+        data_file="hls_tb_ohio_1000_1000_2000_2000.npy"
+        labels_file="cdl_2016_nwOH_1000_1000_2000_2000.npy"
+    elif region=="sd":
+        data_file="hls_tb_sd_1000_1000_2000_2000.npy"
+        labels_file="cdl_2016_seSD_1000_1000_2000_2000.npy"
+    elif region=="vai":
+        data_file="hls_tb_vai_1000_1000_2000_2000.npy"
+        labels_file="cdl_2016_vai_crop_1000_1000_2000_2000.npy"
+    else:
+        raise RuntimeError("Unrecognized region, %s" % region)
+    tb_chips = TBChips(data_dir=data_dir, labels_dir=labels_dir,
+            data_file=data_file, labels_file=labels_file)
     print("...Done")
     data_loader = DataLoader(dataset=tb_chips,
             batch_size=64,
             shuffle=False,
             num_workers=8)
-    return data_loader,tb_chips
+    return data_loader,tb_chips,pj(labels_dir,labels_file)
 
 
 def get_rgb(tb_chips):
@@ -66,7 +82,7 @@ def normalize_feats(features):
         features[:,:,k] = (c - np.min(c)) / (np.max(c) - np.min(c))
     return features
 
-def write_cats_and_features(rgb, features, cdl, cat_dict):
+def write_cats_and_features(region, rgb, features, cdl, cat_dict):
     nrows = 4
     ncols = 14
     grid_sz = (nrows, ncols)
@@ -100,33 +116,30 @@ def write_cats_and_features(rgb, features, cdl, cat_dict):
     ax3.legend()
     ax3.set_title("CDL categories")
 
-    plt.savefig( pj(HOME, "Training/cropnet/test_samples/features.png") )
+    plt.savefig( pj(HOME, "Training/cropnet/test_samples/features_%s.png" \
+            % (region)) )
 
 
 def main(args):
     bbox = [args.subregion_x, args.subregion_y,
             args.subregion_x + args.subregion_size,
             args.subregion_y + args.subregion_size]
-    data_loader,tb_chips = get_data_loader(args.data_npy_file, bbox)
+    data_loader,tb_chips,cdl_file_path = get_data_loader(args.region, bbox)
     model = load_ae_model(args.model_path, args.model_name, chip_size=19,
-            bneck_size=3)
+            bneck_size=3, base_nchans=16) # TODO
 
     rgb = get_rgb(tb_chips)
     features = get_features(model, data_loader, bbox)
     features = normalize_feats(features)
-    cdl = get_cdl_chip(args.cdl_file_path, bbox)
+    cdl = get_cdl_chip(cdl_file_path, bbox)
     cdl,cat_dict = transform_cdl(cdl)
-    write_cats_and_features(rgb, features, cdl, cat_dict)
+    write_cats_and_features(args.region, rgb, features, cdl, cat_dict)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-d", "--data-npy-file", type=str,
-            default=pj(HOME, "Datasets/HLS/test_imgs/hls/" \
-                    "hls_tb_ark_0_0_500_500.npy"))
-    parser.add_argument("--cdl-file-path", type=str, 
-            default=pj(HOME, "Datasets/HLS/test_imgs/cdl/" \
-                    "cdl_2016_neAR_0_0_500_500.npy"))
+    parser.add_argument("--region", type=str, default="ark",
+            choices=["ark", "sd", "ohio", "vai"])
     parser.add_argument("--model-path", type=str, 
             default=pj(HOME, "Training/cropnet/sessions/session_07/models/" \
                     "model.pkl"))

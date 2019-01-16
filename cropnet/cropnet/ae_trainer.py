@@ -32,19 +32,26 @@ class AETrainer(TrainerBase):
         self._sampler_batch_size = sampler_batch_size
 
     def _criterion(self, model_output, x):
-        recon_x,mu,logvar = model_output
+        recon_x,_,_ = model_output
         size_sq = self._input_size * self._input_size
         recon_x = recon_x.view(-1, size_sq).clamp(0.01, 0.99)
         x = x.view(-1, size_sq)
-        BCE = F.binary_cross_entropy(recon_x, x, reduction="sum")
+        return F.mse_loss(recon_x,x),0,0
 
-        # see Appendix B from VAE paper:
-        # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
-        # https://arxiv.org/abs/1312.6114
-        # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
-        KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-
-        return (BCE + KLD, BCE, KLD)
+#    def _criterion(self, model_output, x):
+#        recon_x,mu,logvar = model_output
+#        size_sq = self._input_size * self._input_size
+#        recon_x = recon_x.view(-1, size_sq).clamp(0.01, 0.99)
+#        x = x.view(-1, size_sq)
+#        BCE = F.binary_cross_entropy(recon_x, x, reduction="sum")
+#
+#        # see Appendix B from VAE paper:
+#        # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
+#        # https://arxiv.org/abs/1312.6114
+#        # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
+#        KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+#
+#        return (BCE + KLD, BCE, KLD)
 
 
     def _get_optimizer(self):
@@ -109,6 +116,7 @@ def class_sampler(epoch, trainer):
 def _test_main(args):
     CHIP_SIZE = 19
 #    model = CropNetFCAE(CHIP_SIZE, args.bottleneck)
+#    model = CropNetFCVAE(CHIP_SIZE, args.bottleneck)
     model = CropNetCAE(chip_size=CHIP_SIZE, bneck_size=args.bottleneck,
             base_nchans=3)
     if args.use_cuda:

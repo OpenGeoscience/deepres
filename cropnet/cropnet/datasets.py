@@ -44,25 +44,27 @@ else:
 # Base class
 class CropNetBase(Dataset):
     def __init__(self, data_dir=None, labels_dir=None, tiles_per_cohort=10,
-            **kwargs):
+            data_file=None, labels_file=None, **kwargs):
         super().__init__(**kwargs)
         self._cohort_ct = None
         self._data_dir = data_dir
         self._data_chunks = None
+        self._data_file = data_file
         self._data_paths = None
         self._item_ct = None
         self._labels_dir = labels_dir
+        self._labels_file = labels_file
         self._labels_imgs = None
         self._labels_paths = None
         self._N = None
         self._tile_cohorts = None
-        self._tiles_per_cohort = tiles_per_cohort
+        self._tiles_per_cohort = None
 
         if self._data_dir is None:
             raise RuntimeError("Data directory not specified")
 
         self._get_paths()
-        self._init_cohorts()
+        self._init_cohorts(tiles_per_cohort)
         self._load_new_cohort()
         self._calc_N()
 
@@ -91,17 +93,26 @@ class CropNetBase(Dataset):
 
     def _get_paths(self):
         dd = self._data_dir
-        self._data_paths = [pj(dd,f) for f in os.listdir(dd)]
+        if self._data_file is None:
+            self._data_paths = [pj(dd,f) for f in os.listdir(dd)]
+        else:
+            self._data_paths = [pj(dd, self._data_file)]
         if self._labels_dir is not None:
             ld = self._labels_dir
-            self._labels_paths = [pj(ld,f) for f in os.listdir(ld)]
+            if self._labels_file is None:
+                self._labels_paths = [pj(ld,f) for f in os.listdir(ld)]
+            else:
+                self._labels_paths = [pj(ld, self._labels_file)]
             if len(self._data_paths) != len(self._labels_paths):
                 raise RuntimeError("Different number of files in %s and %s" \
                         % (self._data_dir, self._labels_dir))
         # TODO Ensure that the labels files correspond exactly to the data 
         # files, don't rely on consistent alphabetization
 
-    def _init_cohorts(self):
+    def _init_cohorts(self, tiles_per_cohort=None):
+        if tiles_per_cohort is not None:
+            self._tiles_per_cohort = np.min([len(self._data_paths),
+                tiles_per_cohort])
         N = len(self._data_paths)
         idxs = list(range(N))
         np.random.shuffle(idxs)
@@ -333,8 +344,9 @@ class TBChips(CropNetBase):
         self._update_item_ct()
         return tb_chip,tb_chip
 
-    def get_data(self):
-        return self._tb_chips
+    def get_data(self, index=0):
+        chunk,_ = self._get_chunk_and_label(index)
+        return chunk
 
     def get_image_bbox(self):
         x0,y0 = self._src_image_x,self._src_image_y

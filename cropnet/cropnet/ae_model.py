@@ -18,6 +18,12 @@ g_DEBUG = False
 def load_ae_model(model_path, model_name, is_train=False, **kwargs):
     if model_name=="CropNetFCAE":
         model = CropNetFCAE(**kwargs)
+    elif model_name=="CropNetFCVAE":
+        model = CropNetFCVAE(**kwargs)
+    elif model_name=="CropNetCAE":
+        model = CropNetCAE(**kwargs)
+    elif model_name=="CropNetCVAE":
+        model = CropNetCVAE(**kwargs)
     else:
         raise RuntimeError("Model %s not recognized" % (model_name))
     model.load_state_dict( torch.load(model_path) )
@@ -37,16 +43,59 @@ class CropNetFCAE(nn.Module):
 
         chip_size_sq = chip_size * chip_size
 
+        self.fc1 = nn.Linear(chip_size_sq, 100)
+        self.fc2 = nn.Linear(100, 20)
+        self.bneck = nn.Linear(20, self._bneck_size)
+        self.fc3 = nn.Linear(self._bneck_size, 20)
+        self.fc4 = nn.Linear(20, 100)
+        self.fc5 = nn.Linear(100, chip_size_sq)
+
+    def forward(self, x):
+        z = self._encode(x)
+        out = self._decode(z)
+        return out,None,None
+
+    def get_features(self, x):
+        return self._encode(x)
+
+    def get_input_size(self): # TODO Create a base class with this method, 
+            # put in pyt_utils/modelbase.py
+        return self._chip_size
+
+    def get_name(self):
+        return self._name
+
+    def _decode(self, z):
+        z = F.relu( self.fc3(z) )
+        z = F.relu( self.fc4(z) )
+        z = torch.sigmoid( self.fc5(z) )
+        return z
+
+    def _encode(self, x):
+        x = x.view(-1, self._chip_size * self._chip_size)
+        x = F.relu( self.fc1(x) )
+        x = F.relu( self.fc2(x) )
+        x = F.relu( self.bneck(x) )
+        return x
+
+class CropNetFCVAE(nn.Module):
+    def __init__(self, chip_size=19, bneck_size=3):
+        super(CropNetFCVAE, self).__init__()
+
+        self._bneck_size = bneck_size
+        self._chip_size = chip_size
+        self._name = "cropnetfcvae"
+
+        chip_size_sq = chip_size * chip_size
+
     
 
         self.fc1 = nn.Linear(chip_size_sq, 100)
-        self.fc11 = nn.Linear(100, 100)
         self.fc2 = nn.Linear(100, 20)
         self.bneck1 = nn.Linear(20, self._bneck_size)
         self.bneck2 = nn.Linear(20, self._bneck_size)
         self.fc3 = nn.Linear(self._bneck_size, 20)
         self.fc4 = nn.Linear(20, 100)
-        self.fc44 = nn.Linear(100, 100)
         self.fc5 = nn.Linear(100, chip_size_sq)
 
     def forward(self, x):
@@ -69,14 +118,12 @@ class CropNetFCAE(nn.Module):
     def _decode(self, z):
         z = F.relu( self.fc3(z) )
         z = F.relu( self.fc4(z) )
-        z = F.relu( self.fc44(z) )
         z = torch.sigmoid( self.fc5(z) )
         return z
 
     def _encode(self, x):
         x = x.view(-1, self._chip_size * self._chip_size)
         x = F.relu( self.fc1(x) )
-        x = F.relu( self.fc11(x) )
         x = F.relu( self.fc2(x) )
         return self.bneck1(x), self.bneck2(x)
 
@@ -310,7 +357,7 @@ class CropNetRAE(nn.Module):
 
 
 
-class CropNetCAE(nn.Module):
+class CropNetCVAE(nn.Module):
     def __init__(self, chip_size=19, num_conv_blocks=3, base_nchans=32,
             bneck_size=3):
         super().__init__()
@@ -321,7 +368,7 @@ class CropNetCAE(nn.Module):
         self._chip_size = chip_size
         self._decoder = None
         self._encoder = None
-        self._name = "CropNetCAE"
+        self._name = "CropNetCVAE"
         self._num_conv_blocks = num_conv_blocks
 
         self._make_encoder()
@@ -418,11 +465,105 @@ class CropNetCAE(nn.Module):
     def get_name(self):
         return self._name
 
+class CropNetCAE(nn.Module):
+    def __init__(self, chip_size=19, num_conv_blocks=3, base_nchans=32,
+            bneck_size=3):
+        super().__init__()
+
+        self._base_nchans = base_nchans
+        self._bias = True
+        self._bneck_size = bneck_size
+        self._chip_size = chip_size
+        self._decoder = None
+        self._encoder = None
+        self._name = "CropNetCAE"
+        self._num_conv_blocks = num_conv_blocks
+
+        self._make_encoder()
+        self._make_decoder()
+
+        reduction = 2**self._num_conv_blocks
+        self._lin_size = 3 * 3 * (2**(self._num_conv_blocks-1)) \
+                * self._base_nchans
+#        self._lin_size = self._num_conv_blocks * self._base_nchans \
+#                // (reduction*reduction)
+
+        self.bneck = nn.Linear(self._lin_size, self._bneck_size)
+        self.fc = nn.Linear(self._bneck_size, self._lin_size)
+        self.sigmoid = nn.Sigmoid()
+
+    def _make_encoder(self):
+        lays = []
+        base = self._base_nchans
+        lays.append( nn.Conv2d(1, base, kernel_size=3, stride=2,
+                     padding=1, bias=self._bias) )
+        lays.append( nn.BatchNorm2d(base) )
+        lays.append( nn.ReLU(inplace=True) )
+        lays.append( nn.Conv2d(base, base*2, kernel_size=3, stride=2,
+                     padding=1, bias=self._bias) )
+        lays.append( nn.BatchNorm2d(base*2) )
+        lays.append( nn.ReLU(inplace=True) )
+        lays.append( nn.Conv2d(base*2, base*4, kernel_size=3, stride=2,
+                     padding=1, bias=self._bias) )
+        lays.append( nn.BatchNorm2d(base*4) )
+        lays.append( nn.ReLU(inplace=True) )
+        self._encoder = nn.Sequential(*lays)
+
+    def _make_decoder(self):
+        lays = []
+        base = self._base_nchans
+        lays.append( nn.ConvTranspose2d(base*4, base*2, kernel_size=3, stride=2,
+                     padding=1, bias=self._bias, output_padding=0) )
+        lays.append( nn.BatchNorm2d(base*2) )
+        lays.append( nn.ReLU(inplace=True) )
+        lays.append( nn.ConvTranspose2d(base*2, base, kernel_size=3, stride=2,
+                     padding=1, bias=self._bias, output_padding=1) )
+        lays.append( nn.BatchNorm2d(base) )
+        lays.append( nn.ReLU(inplace=True) )
+        lays.append( nn.ConvTranspose2d(base, 1, kernel_size=3, stride=2,
+                     padding=1, bias=self._bias, output_padding=0) )
+        lays.append( nn.BatchNorm2d(1) )
+        self._decoder = nn.Sequential(*lays)
+
+    def encode(self, x):
+        if g_DEBUG: print("encode")
+        x = self._encoder(x)
+        if g_DEBUG: print(x.shape)
+        x = x.view(-1, self._lin_size)
+        bneck = self.bneck(x)
+        if g_DEBUG: print(bneck.shape)
+        return bneck
+        # So returning mean (mu) and log of the variance (logvar), here
+
+    def decode(self, z):
+        if g_DEBUG: print("decode")
+        if g_DEBUG: print(z.shape)
+        z = self.fc(z).view(-1, 4*self._base_nchans, 3, 3)
+        z = self._decoder(z)
+        if g_DEBUG: print(z.shape)
+        return self.sigmoid(z).view(-1, 1, self._chip_size, self._chip_size)
+
+    def forward(self, x):
+        z = self.encode(x.view(-1, 1, self._chip_size, self._chip_size))
+        return self.decode(z),None,None
+
+    def get_features(self, x):
+        return self.encode(x)
+
+    def get_input_size(self): # TODO Create a base class with this method, 
+            # put in pyt_utils/modelbase.py
+        return self._chip_size
+
+    def get_name(self):
+        return self._name
+
 def _test_main(args):
     sz = args.chip_size
     if args.model == "CropNetCAE":
         model = CropNetCAE(chip_size=sz)
-    if args.model == "CropNetRAE":
+    elif args.model == "CropNetCVAE":
+        model = CropNetCVAE(chip_size=sz)
+    elif args.model == "CropNetRAE":
         model = CropNetRAE(chip_size=sz)
     elif args.model == "CropNetFCAE":
         model = CropNetFCAE()
@@ -432,8 +573,11 @@ def _test_main(args):
     x = torch.FloatTensor(sz, sz).uniform_()
     print("x shape: %s" % repr(x.shape))
     yhat,mu,logvar = model(x)
-    print("yhat shape: %s, mu shape %s, logvar shape %s" \
-            % (yhat.shape, mu.shape, logvar.shape))
+    if mu is None and logvar is None:
+        print("yhat shape: %s" % repr(yhat.shape))
+    else:
+        print("yhat shape: %s, mu shape %s, logvar shape %s" \
+                % (yhat.shape, mu.shape, logvar.shape))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
