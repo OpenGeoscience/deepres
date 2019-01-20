@@ -35,15 +35,38 @@ pj = os.path.join
 HOME = os.path.expanduser("~")
 
 
-g_regions = ["ark", "ohio", "sd", "vai"]
+g_hls_regions = ["ark", "ohio", "sd", "vai"]
+g_cdl_regions = ["neAR", "nwOH", "seSD", "vai_crop"]
 
 
 def _extract_session_dir(model_path):
     return os.path.dirname( os.path.dirname(model_path) )
 
+def make_full_cdl_map(region, cfg):
+    session_dir = _extract_session_dir(cfg["model_path"])
+    feat_maps_dir = pj(session_dir, "feat_maps/cdl")
+    if not pe(feat_maps_dir):
+        os.makedirs(feat_maps_dir)
+    feat_map = np.zeros((3000,3000)) # TODO
+    d = cfg["labels_dir"]
+    for p in [pj(d,f) for f in os.listdir(d) \
+            if f.startswith("cdl_2016_"+region)]:
+        feats = np.load(p)
+        if feats.dtype != np.uint8:
+            raise RuntimeError("Expecting type np.uint8 for %s, got %s" \
+                    % (p, feats.dtype))
+        bbox = get_bbox_from_file_path(p)
+        sz = bbox[2] - bbox[0]
+        feat_map[ bbox[0]:bbox[2], bbox[1]:bbox[3] ] = feats
+    region_idx = g_cdl_regions.index(region)
+    hls_name = g_hls_regions[region_idx]
+    save_path = pj(feat_maps_dir, "%s_feat_map.npy" % (hls_name))
+    np.save(save_path, feat_map)
+    cv2.imwrite(save_path[:-4] + ".png", feat_map)
+
 def make_full_feat_map(region, model, cfg):
     session_dir = _extract_session_dir(cfg["model_path"])
-    feat_maps_dir = pj(session_dir, "feat_maps")
+    feat_maps_dir = pj(session_dir, "feat_maps/hls")
     if not pe(feat_maps_dir):
         os.makedirs(feat_maps_dir)
     feat_map = np.zeros((3000,3000,3)) # TODO
@@ -68,8 +91,10 @@ def main(args):
     cfg = vars(args)
     model = load_ae_model(args.model_path, args.model_name, chip_size=19,
             bneck_size=3, base_nchans=16) # TODO
-    for region in g_regions:
+    for region in g_hls_regions:
         make_full_feat_map(region, model, cfg)
+    for region in g_cdl_regions:
+        make_full_cdl_map(region, cfg)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -80,6 +105,8 @@ if __name__ == "__main__":
                     "CropNetCAE.pkl"))
     parser.add_argument("-d", "--data-dir", type=str,
             default=pj(HOME, "Datasets/HLS/tb_data/all/hls"))
+    parser.add_argument("-l", "--labels-dir", type=str,
+            default=pj(HOME, "Datasets/HLS/tb_data/all/cdl"))
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--num-workers", type=int, default=8)
     args = parser.parse_args()
