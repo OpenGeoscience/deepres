@@ -169,6 +169,14 @@ def make_clut(file_path=pj(HOME,
                     color_dict[cat]["name"] = name
     return color_dict
 
+def normalize_feats(features):
+    if len(features.shape) != 3:
+        raise RuntimeError("Expecting features input to have 3 dimensions")
+    for k in range(features.shape[2]):
+        c = features[:,:,k]
+        features[:,:,k] = (c - np.min(c)) / (np.max(c) - np.min(c))
+    return features
+
 def save_tb_chips(region, hls_dir, tb_chips, bbox_src, bbox):
     bbox = list(bbox)
     bbox[0] += bbox_src[0]
