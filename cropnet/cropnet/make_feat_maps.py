@@ -5,6 +5,7 @@ the 4 regions
 
 import argparse
 import csv
+import cv2
 import logging
 import numpy as np
 import os
@@ -40,35 +41,6 @@ g_regions = ["ark", "ohio", "sd", "vai"]
 def _extract_session_dir(model_path):
     return os.path.dirname( os.path.dirname(model_path) )
 
-def get_data_loader(region, bbox):
-    sz = bbox[2] - bbox[0]
-    print("Getting HLS data...")
-    data_dir = pj(HOME,"Datasets/HLS/tb_data/test/hls")
-    labels_dir = pj(HOME,"Datasets/HLS/tb_data/test/cdl")
-    if region=="ark":
-        data_file = "hls_tb_ark_1000_1000_2000_2000.npy"
-        labels_file = "cdl_2016_neAR_1000_1000_2000_2000.npy"
-    elif region=="ohio":
-        data_file="hls_tb_ohio_1000_1000_2000_2000.npy"
-        labels_file="cdl_2016_nwOH_1000_1000_2000_2000.npy"
-    elif region=="sd":
-        data_file="hls_tb_sd_1000_1000_2000_2000.npy"
-        labels_file="cdl_2016_seSD_1000_1000_2000_2000.npy"
-    elif region=="vai":
-        data_file="hls_tb_vai_1000_1000_2000_2000.npy"
-        labels_file="cdl_2016_vai_crop_1000_1000_2000_2000.npy"
-    else:
-        raise RuntimeError("Unrecognized region, %s" % region)
-    tb_chips = TBChips(data_dir=data_dir, labels_dir=labels_dir,
-            data_file=data_file, labels_file=labels_file)
-    print("...Done")
-    data_loader = DataLoader(dataset=tb_chips,
-            batch_size=64,
-            shuffle=False,
-            num_workers=8)
-    return data_loader,tb_chips,pj(labels_dir,labels_file)
-
-
 def make_full_feat_map(region, model, cfg):
     session_dir = _extract_session_dir(cfg["model_path"])
     feat_maps_dir = pj(session_dir, "feat_maps")
@@ -99,20 +71,10 @@ def main(args):
     for region in g_regions:
         make_full_feat_map(region, model, cfg)
 
-#        
-#    bbox = [args.subregion_x, args.subregion_y,
-#            args.subregion_x + args.subregion_size,
-#            args.subregion_y + args.subregion_size]
-#    data_loader,tb_chips,cdl_file_path = get_data_loader(args.region, bbox)
-#
-#    rgb = get_rgb(tb_chips)
-#    features = get_features(model, data_loader, bbox)
-#    features = normalize_feats(features)
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-m", "--model-name", type=str, default="CropNetCAE",
-            choices=["CropNetCAE", "CropNetFCAE"])
+            choices=["CropNetCAE", "CropNetFCAE", "CropNetCVAE"])
     parser.add_argument("--model-path", type=str, 
             default=pj(HOME, "Training/cropnet/sessions/session_02/models/" \
                     "CropNetCAE.pkl"))
