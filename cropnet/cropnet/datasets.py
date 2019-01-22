@@ -94,13 +94,15 @@ class CropNetBase(Dataset):
     def _get_paths(self):
         dd = self._data_dir
         if self._data_file is None:
-            self._data_paths = [pj(dd,f) for f in os.listdir(dd)]
+            self._data_paths = [pj(dd,f) for f in os.listdir(dd) \
+                    if f.endswith(".npy")]
         else:
             self._data_paths = [pj(dd, self._data_file)]
         if self._labels_dir is not None:
             ld = self._labels_dir
             if self._labels_file is None:
-                self._labels_paths = [pj(ld,f) for f in os.listdir(ld)]
+                self._labels_paths = [pj(ld,f) for f in os.listdir(ld) \
+                        if f.endswith(".npy")]
             else:
                 self._labels_paths = [pj(ld, self._labels_file)]
             if len(self._data_paths) != len(self._labels_paths):
@@ -150,13 +152,11 @@ class CropNetBase(Dataset):
 # 224x224 patches to feed into pre-trained ResNet, classifying whole patch 
 # For this dataset the rgb images should be stitched together, i.e. combine
 # all rgb feature outputs from a given area subject to memory constraints
-class RGBPatches(CropNetBase):
-    def __init__(self, cats={}, ingest_patch_size=224, mode="test", 
-            **kwargs):
-        super().__init__(tiles_per_cohort=100, **kwargs)
+class RGBPatches2(Dataset):
+    def __init__(self, cats={}, ingest_patch_size=224, mode="test"):
+        super().__init__()
         self._cats = [3, 4, 5, 190] # TODO--just estimated from a single chip
         self._ingest_patch_size = ingest_patch_size
-        self._label_mode = None
         self._mode = mode
 
     def __getitem__(self, index):
@@ -239,6 +239,90 @@ class RGBPatches(CropNetBase):
 #                    " image")
 #        self._img_ht,self._img_wd = self._data_img.shape[:2]
 #        print("...Done.  Shape is %s" % repr(self._data_img.shape))
+
+
+class RGBPatches(CropNetBase):
+    def __init__(self, cats, ingest_patch_size=224, mode="test", split=0.8,
+            **kwargs):
+        self._cats = cats
+        self._ingest_patch_size = ingest_patch_size
+        self._label_mode = None
+        self._mode = mode
+        self._split = split
+        if self._mode!="train" and self._mode!="test":
+            raise RuntimeError("Unrecognized training mode, %s" % (mode))
+        super().__init__(tiles_per_cohort=100, **kwargs)
+
+    def __getitem__(self, index):
+        rgb,label = self._get_chunk_and_label(index)
+        ht,raw_wd = rgb.shape[:2]
+        wd = int(self._split * raw_wd) if self._mode=="train" \
+                else raw_wd - int(self._split * raw_wd)
+        j_start = 0 if self._mode=="train" else raw_wd - wd
+
+        if self._mode=="train": # TODO pre-calculate
+            i_beg,j_beg,i_end,j_end = self._get_rand_bbox(ht,wd)
+        else:
+            # TODO accommodate a different # of chips per chunk
+            # Right now assuming nice square chunks (rgb images)
+            sz = self._ingest_patch_size
+            index = index % ((ht // sz) * (wd // sz))
+            sz = self._ingest_patch_size
+            i = index % (ht // sz)
+            j = index // (ht // sz)
+            i_beg = i * sz
+            j_beg = j * sz
+            i_end = i_beg + sz
+            j_end = j_beg + sz
+        j_beg += j_start
+        j_end += j_start
+
+        patch = rgb[i_beg:i_end, j_beg:j_end]
+        patch = np.copy(patch)
+        raw_label = label[i_beg:i_end, j_beg:j_end]
+        label = np.copy(raw_label)
+
+        bgnd_mask = np.ones_like(label) > 0
+        ct = 1
+        for k in self._cats:
+            mask_k = raw_label==k
+            label[mask_k] = ct
+            ct += 1
+            bgnd_mask[mask_k] = False
+        label[bgnd_mask] = 0
+
+        label = torch.LongTensor([label]).squeeze()
+        patch = Image.fromarray( np.uint8(patch*255) )
+        transform = tv.transforms.ToTensor()
+        return transform(patch),label 
+
+    def get_ingest_patch_size(self):
+        return self._ingest_patch_size
+
+    def get_num_cats(self):
+        return len(self._cats) + 1
+
+    # Currently this throws out the outer border, whatever exceeds n*sz pix
+    def _calc_N(self):
+        acc = 0
+        sz = self._ingest_patch_size
+        self._chips_per_chunk = []
+        for p in self._data_paths:
+            ht,raw_wd = np.load(p).shape[:2]
+            wd = int(self._split * raw_wd) if self._mode=="train" \
+                    else raw_wd - int(self._split * raw_wd)
+            n_wd = (wd-0) // sz
+            n_ht = (ht-0) // sz
+            self._chips_per_chunk.append(n_wd*n_ht)
+            acc += n_wd * n_ht
+        self._N = acc
+
+    def _get_rand_bbox(self, ht, wd):
+        sz = self._ingest_patch_size
+        x,y = torch.rand(2).data
+        i_beg = int( x*(wd-sz) )
+        j_beg = int( y*(ht-sz) )
+        return i_beg,j_beg,i_beg+sz,j_beg+sz
 
 
 # 224x224 patches to feed into pre-trained ResNet, classifying center pixel

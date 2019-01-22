@@ -67,6 +67,27 @@ def get_cat_dict(cdl):
             cat_dict[i] = clut[i]
     return cat_dict
 
+def get_cat_list(cats_opt):
+    if cats_opt == "original4":
+        cats = [3, 4, 5, 190]
+    elif cats_opt == "top5":
+        cats = [5, 1, 176, 0, 121]
+    elif cats_opt == "top10":
+        cats = [5, 1, 176, 0, 121, 141, 3, 24, 36, 61]
+    elif cats_opt == "top25":
+        cats = [5, 1, 176, 0, 121, 141, 3, 24, 36, 61, 122, 111, 123, 2, 69,
+                190, 37, 142, 195, 54, 152, 76, 124, 4, 58]
+    elif cats_opt == "top50":
+        cats = [5, 1, 176, 0, 121, 141, 3, 24, 36, 61, 122, 111, 123, 2, 69,
+                190, 37, 142, 195, 54, 152, 76, 124, 4, 58, 26, 28, 75, 6, 33,
+                205, 13, 10, 131, 42, 77, 23, 27, 44, 50, 66, 21, 7, 8, 59, 
+                9, 143, 48, 12, 11]
+    elif cats_opt == "all":
+        cats = list(range(256))
+    else:
+        raise RuntimeError("Unrecognized cats option, %s" % (cats_opt))
+    return cats
+
 def get_cdl_subregion(img_path, bbox):
     img = gdal.Open(img_path)
     layer = img.GetRasterBand(1)

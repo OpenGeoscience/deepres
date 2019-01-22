@@ -20,7 +20,7 @@ from general.utils import create_session_dir, retain_session_dir
 # local includes
 from datasets import RGBPatches
 from cropunet import CropUNet
-from utils import transform_cdl
+from utils import transform_cdl, get_cat_list
 
 pe = os.path.exists
 pj = os.path.join
@@ -35,10 +35,12 @@ def main(args):
     session_dir = os.path.dirname(args.data_dir_or_file)
     supdir = pj(session_dir, "segmentations")
     output_dir = create_session_dir(supdir, dir_stub="segment_%02d")
-
-    dataset = RGBPatches(args.data_dir_or_file, args.labels_dir_or_file,
+    cats = get_cat_list(args.cats)
+    dataset = RGBPatches(data_dir=args.data_dir_or_file,
+            labels_dir=args.labels_dir_or_file,
+            cats=cats,
             mode="test")
-    num_classes = dataset.get_num_cats()
+    num_classes = np.min([len(cats)+1, 256])
 #    loader = DataLoader(dataset,
 #            batch_size=args.batch_size,
 #            num_workers=8,
@@ -60,7 +62,13 @@ def main(args):
         else:
             patch = Variable(patch)
             label = Variable(label)
+        if patch.shape[2] != dataset.get_ingest_patch_size() or \
+                patch.shape[3] != dataset.get_ingest_patch_size():
+            continue
         yhat = model(patch)
+#        print(patch.shape, yhat.shape)
+#        print(torch.min(patch), torch.max(patch), torch.median(patch))
+#        print("\t", torch.min(yhat), torch.max(yhat), torch.median(yhat))
         preds = torch.argmax(yhat, dim=1).squeeze_()
         preds,_ = transform_cdl(preds.cpu().data.numpy())
         preds = np.transpose(preds, (2,0,1))
@@ -92,6 +100,8 @@ if __name__ == "__main__":
             default=pj(DATA, "Datasets/HLS/test_imgs/cdl/" \
                     "cdl_2016_neAR_0_0_500_500.npy"))
     parser.add_argument("--no-cuda", dest="use_cuda", action="store_false")
+    parser.add_argument("--cats", "--categories", dest="cats", type=str,
+            default="original4", choices=["original4", "all"])
     args = parser.parse_args()
     if args.test:
         _test_main(args)
