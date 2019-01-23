@@ -53,7 +53,7 @@ def main(args):
     for i in range(len(dataset)):
         patch,label = dataset[i]
         patch.unsqueeze_(0)
-        label,_ = transform_cdl(label.cpu().data.numpy())
+        label,_ = transform_cdl(label.cpu().data.numpy(), cats)
         label = np.transpose(label, (2,0,1))
         label = torch.FloatTensor(label)
         if args.use_cuda:
@@ -70,7 +70,7 @@ def main(args):
 #        print(torch.min(patch), torch.max(patch), torch.median(patch))
 #        print("\t", torch.min(yhat), torch.max(yhat), torch.median(yhat))
         preds = torch.argmax(yhat, dim=1).squeeze_()
-        preds,_ = transform_cdl(preds.cpu().data.numpy())
+        preds,_ = transform_cdl(preds.cpu().data.numpy(), cats)
         preds = np.transpose(preds, (2,0,1))
         preds = torch.FloatTensor(preds)
         if args.use_cuda:

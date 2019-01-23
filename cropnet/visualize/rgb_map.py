@@ -26,7 +26,7 @@ from cropnet.datasets import TBChips
 from cropnet.ae_model import load_ae_model
 from location_image import get_cdl_chip
 from utils import get_chip_bbox, get_features, get_bbox_from_file_path, \
-        get_cdl_subregion, make_clut, transform_cdl, normalize_feats
+        get_cdl_subregion, transform_cdl, normalize_feats
 
 pe = os.path.exists
 pj = os.path.join

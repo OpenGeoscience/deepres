@@ -40,6 +40,7 @@ if platform.node() == "matt-XPS-8900":
 else:
     DATA = "/media/data"
 
+g_unknown_value = 0
 
 # Base class
 class CropNetBase(Dataset):
@@ -251,6 +252,9 @@ class RGBPatches(CropNetBase):
         self._split = split
         if self._mode!="train" and self._mode!="test":
             raise RuntimeError("Unrecognized training mode, %s" % (mode))
+        if g_unknown_value not in self._cats:
+            raise RuntimeError("Categories list must include the cat. for " \
+                    "unknown values, %d" % (g_unknown_value))
         super().__init__(tiles_per_cohort=100, **kwargs)
 
     def __getitem__(self, index):
@@ -283,13 +287,13 @@ class RGBPatches(CropNetBase):
         label = np.copy(raw_label)
 
         bgnd_mask = np.ones_like(label) > 0
-        ct = 1
+        ct = 0
         for k in self._cats:
             mask_k = raw_label==k
             label[mask_k] = ct
             ct += 1
             bgnd_mask[mask_k] = False
-        label[bgnd_mask] = 0
+        label[bgnd_mask] = g_unknown_value
 
         label = torch.LongTensor([label]).squeeze()
         patch = Image.fromarray( np.uint8(patch*255) )
@@ -300,7 +304,7 @@ class RGBPatches(CropNetBase):
         return self._ingest_patch_size
 
     def get_num_cats(self):
-        return len(self._cats) + 1
+        return len(self._cats)
 
     # Currently this throws out the outer border, whatever exceeds n*sz pix
     def _calc_N(self):

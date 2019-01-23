@@ -53,7 +53,7 @@ def main(args):
     train_loader,test_loader = get_loaders(cfg)
     cats = get_cat_list(cfg["cats"])
     num_classes = len(cats) # if cfg["cats"]=="all" else len(cats)+1 TODO!
-    model = CropUNet(num_classes=len(cats))
+    model = CropUNet(num_classes=num_classes)
     if args.use_cuda:
         model = model.cuda()
     model.train()
@@ -78,10 +78,8 @@ def main(args):
 #            print(patches.shape, yhat.shape)
 #            print(torch.min(patches), torch.max(patches), torch.median(patches))
 #            print("\t", torch.min(yhat), torch.max(yhat), torch.median(yhat))
-            print(yhat.shape, labels.shape)
 #            raise
             loss = criterion(yhat, labels)
-Need to zero out/replace with null value all unused categories
             loss.backward()
             optimizer.step()
             preds = torch.argmax(yhat, dim=1)
@@ -92,14 +90,16 @@ Need to zero out/replace with null value all unused categories
         new_labels = []
         new_preds = []
         for pred,label in zip(preds,labels):
-            label,_ = transform_cdl(label.cpu().data.numpy())
+            label,_ = transform_cdl(label.cpu().data.numpy(), cats)
             label = np.transpose(label, (2,0,1))
             label = torch.cuda.FloatTensor(label)
             new_labels.append(label)
-            pred,_ = transform_cdl(pred.cpu().data.numpy())
+            pred,_ = transform_cdl(pred.cpu().data.numpy(), cats)
             pred = np.transpose(pred, (2,0,1))
             pred = torch.cuda.FloatTensor(pred)
             new_preds.append(pred)
+        print(np.unique([x.cpu().data.numpy() for x in new_preds]),
+                np.unique([x.cpu().data.numpy() for x in new_labels]))
 
         print("Epoch %d: Loss %0.4f, Acc. %0.2f" % (epoch, loss.item(), acc))
         if epoch % sen == sen-1:
@@ -142,11 +142,11 @@ Need to zero out/replace with null value all unused categories
             new_labels = []
             new_preds = []
             for pred,label in zip(preds,labels):
-                label,_ = transform_cdl(label.cpu().data.numpy())
+                label,_ = transform_cdl(label.cpu().data.numpy(), cats)
                 label = np.transpose(label, (2,0,1))
                 label = torch.cuda.FloatTensor(label)
                 new_labels.append(label)
-                pred,_ = transform_cdl(pred.cpu().data.numpy())
+                pred,_ = transform_cdl(pred.cpu().data.numpy(), cats)
                 pred = np.transpose(pred, (2,0,1))
                 pred = torch.cuda.FloatTensor(pred)
                 new_preds.append(pred)

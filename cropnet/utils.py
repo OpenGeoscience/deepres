@@ -208,10 +208,14 @@ def save_tb_chips(region, hls_dir, tb_chips, bbox_src, bbox):
         bbox[3])), tb_chips )
 
 # Convert the cdl file into an rgb image with appropriate colors and labels
-def transform_cdl(cdl):
+def transform_cdl(cdl, cats=None):
     cat_dict = get_cat_dict(cdl)
     keys = list(cat_dict.keys())
     h,w = cdl.shape[:2]
+    raw_cdl = np.copy(cdl)
+    if cats is not None:
+        for i in range(len(cats)):
+            cdl[ raw_cdl==i ] = cats[i]
     cdl_rgb = np.zeros((h,w,3))
     for i in range(256):
         if i in keys:
