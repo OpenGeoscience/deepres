@@ -1,0 +1,25 @@
+model:
+    arch: pspnet
+data:
+    dataset: ark
+    train_split: training
+    val_split: validation
+    img_rows: 336
+    img_cols: 336
+    path: ./satellitedata/patchark_train/
+training:
+    train_iters: 300000
+    batch_size: 1
+    val_interval: 1000
+    n_workers: 16
+    print_interval: 50
+    optimizer:
+        name: 'sgd'
+        lr: 1.0e-10
+        weight_decay: 0.0005
+        momentum: 0.99
+    loss:
+        name: 'cross_entropy'
+        size_average: False
+    lr_schedule:
+    resume: crop_pspnet_ark_best_model.pkl
