@@ -61,6 +61,14 @@ def main(args):
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr,
             momentum=args.momentum, weight_decay=args.weight_decay)
     sen = cfg["save_every_N"]
+    best_test_acc = 0
+    samples_dir = pj(os.path.dirname(os.path.abspath(args.output_dir)),
+            "samples/cropunet")
+    if not pe(samples_dir):
+        os.makedirs(samples_dir)
+    models_dir = args.output_dir # TODO
+    if not pe(models_dir):
+        os.makedirs(models_dir)
     for epoch in range(args.num_epochs):
         iterator = iter(train_loader)
         for b in range(len(train_loader.dataset) // args.batch_size):
@@ -106,13 +114,13 @@ def main(args):
             for i,(patch,pred,label) in enumerate( zip(patches, new_preds,
                 new_labels) ):
                 tv.utils.save_image([patch, pred, label],
-                        pj(os.path.dirname(os.path.abspath(args.output_dir)),
-                            "samples/cropunet/segments_%03d_%03d.png" \
-                                    % (epoch, i)))
+                        pj(samples_dir, "segments_%03d_%03d.png" % (epoch, i)))
 
-            iterator = iter(test_loader)
+            test_iterator = iter(test_loader)
+            model.eval()
+            accs = []
             for b in range(len(test_loader.dataset) // args.batch_size):
-                patches,labels = next(iterator)
+                patches,labels = next(test_iterator)
                 if args.use_cuda:
                     patches = Variable(patches).cuda()
                     with torch.no_grad():
@@ -133,8 +141,10 @@ def main(args):
 #                print(torch.min(yhat), torch.max(yhat), torch.median(yhat))
 #                print(np.unique( preds.cpu().data.numpy() ))
                 acc = 100.0 * np.mean( (preds==labels).cpu().data.numpy() )
+                accs.append(acc)
 
-            s = "TEST: Loss %0.4f, Acc. %0.2f" % (loss.item(), acc)
+            test_acc = np.mean(accs)
+            s = "TEST: Loss %0.4f, Acc. %0.2f" % (loss.item(), test_acc)
             print(s)
             with open(pj(args.output_dir, "session.log"), "a") as fp:
                 fp.write(s + "\n")
@@ -153,11 +163,12 @@ def main(args):
             for i,(patch,pred,label) in enumerate( zip(patches, new_preds,
                 new_labels) ):
                 tv.utils.save_image([patch, pred, label],
-                        pj(os.path.dirname(os.path.abspath(args.output_dir)),
-                            "samples/cropunet/segments_test_%03d_%03d.png" \
-                                    % (epoch, i)))
-            torch.save(model.state_dict(), pj(args.output_dir,
-                "CropUNet_%04d.pkl" % (epoch)))
+                        pj(samples_dir, "segments_test_%03d_%03d.png" \
+                                % (epoch, i)))
+            if test_acc > best_test_acc:
+                torch.save(model.state_dict(), pj(models_dir,
+                    "CropUNet_%04d.pkl" % (epoch)))
+                best_test_acc = test_acc
     
 
 def _test_main(args):

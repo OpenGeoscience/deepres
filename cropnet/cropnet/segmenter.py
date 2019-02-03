@@ -40,7 +40,7 @@ def main(args):
             labels_dir=args.labels_dir_or_file,
             cats=cats,
             mode="test")
-    num_classes = np.min([len(cats)+1, 256])
+    num_classes = len(cats)
 #    loader = DataLoader(dataset,
 #            batch_size=args.batch_size,
 #            num_workers=8,
@@ -82,6 +82,7 @@ def main(args):
             "segments_%03d.png" % (i)))
 
     retain_session_dir(output_dir)
+    print("Wrote output maps to %s" % output_dir)
 
 
 def _test_main(args):
@@ -101,7 +102,8 @@ if __name__ == "__main__":
                     "cdl_2016_neAR_0_0_500_500.npy"))
     parser.add_argument("--no-cuda", dest="use_cuda", action="store_false")
     parser.add_argument("--cats", "--categories", dest="cats", type=str,
-            default="original4", choices=["original4", "all"])
+            default="original4", choices=["original4", "top5", "top10", 
+                "top25", "top50", "all"])
     args = parser.parse_args()
     if args.test:
         _test_main(args)

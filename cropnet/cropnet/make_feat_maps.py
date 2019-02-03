@@ -28,7 +28,8 @@ from general.utils import create_session_dir, retain_session_dir
 from ae_model import CropNetCAE, CropNetFCAE, load_ae_model
 from ae_trainer import AETrainer
 from datasets import RGBPatchesCenter, TBChips
-from utils import get_features, get_bbox_from_file_path, normalize_feats
+from utils import get_chip_bbox, get_features, get_bbox_from_file_path, \
+        get_cdl_subregion, transform_cdl, normalize_feats
 
 pe = os.path.exists
 pj = os.path.join
@@ -58,11 +59,16 @@ def make_full_cdl_map(region, cfg):
         bbox = get_bbox_from_file_path(p)
         sz = bbox[2] - bbox[0]
         feat_map[ bbox[0]:bbox[2], bbox[1]:bbox[3] ] = feats
+    
     region_idx = g_cdl_regions.index(region)
     hls_name = g_hls_regions[region_idx]
     save_path = pj(feat_maps_dir, "%s_feat_map.npy" % (hls_name))
     np.save(save_path, feat_map)
     cv2.imwrite(save_path[:-4] + ".png", feat_map)
+    
+    feat_map,cat_dict = transform_cdl(feat_map)
+    feat_map = (feat_map*255.0).astype(np.uint8)
+    cv2.imwrite(save_path[:-4] + "_false_color.png", feat_map)
 
 def make_full_feat_map(region, model, cfg):
     session_dir = _extract_session_dir(cfg["model_path"])
@@ -90,9 +96,9 @@ def make_full_feat_map(region, model, cfg):
 def main(args):
     cfg = vars(args)
     model = load_ae_model(args.model_path, args.model_name, chip_size=19,
-            bneck_size=3, base_nchans=16) # TODO
-    for region in g_hls_regions:
-        make_full_feat_map(region, model, cfg)
+            bneck_size=3, base_nchans=cfg["base_nchans"])
+#    for region in g_hls_regions:
+#        make_full_feat_map(region, model, cfg)
     for region in g_cdl_regions:
         make_full_cdl_map(region, cfg)
 
@@ -109,6 +115,7 @@ if __name__ == "__main__":
             default=pj(HOME, "Datasets/HLS/tb_data/all/cdl"))
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--num-workers", type=int, default=8)
+    parser.add_argument("--base-nchans", type=int, default=16)
     args = parser.parse_args()
     main(args)
 

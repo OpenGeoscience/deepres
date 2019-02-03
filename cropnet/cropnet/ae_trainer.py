@@ -58,6 +58,10 @@ class AETrainer(TrainerBase):
         return super(AETrainer, self)._get_optimizer()
 
     def _post_batch_hook(self):
+        train_loader = self.get_train_loader()
+        train_bs = train_loader.dataset.update_item_ct(train_loader.batch_size)
+        test_loader = self.get_test_loader()
+        test_bs = test_loader.dataset.update_item_ct(test_loader.batch_size)
         self.get_train_loader().dataset.check_for_cohort_update()
         self.get_test_loader().dataset.check_for_cohort_update()
 

@@ -73,7 +73,7 @@ class CropNetBase(Dataset):
         return self._N
 
     def check_for_cohort_update(self):
-        if self._item_ct >= self.items_per_cohort():
+        if self._item_ct >= self.items_per_cohort() // len(self._tile_cohorts):
             self._load_new_cohort()
 
     def items_per_cohort(self):
@@ -81,6 +81,9 @@ class CropNetBase(Dataset):
 
     def num_chunks(self):
         return len(self._data_paths)
+
+    def update_item_ct(self, batch_size=1):
+        self._item_ct += batch_size
 
     def _get_chunk_and_label(self, index):
         idx = index % self._tiles_per_cohort
@@ -146,9 +149,6 @@ class CropNetBase(Dataset):
         print("...Done")
         if self._cohort_ct == len(self._tile_cohorts):
             self._init_cohorts()
-
-    def _update_item_ct(self):
-        self._item_ct += 1
 
 # 224x224 patches to feed into pre-trained ResNet, classifying whole patch 
 # For this dataset the rgb images should be stitched together, i.e. combine
@@ -415,6 +415,8 @@ class TBChips(CropNetBase):
 
         if resize_to > 0:
             self._transform = tv.transforms.Resize(resize_to)
+        print("Created instance of TBChips dataset, %d cohorts." \
+                % len(self._tile_cohorts))
 
     def __getitem__(self, index):
         chunk,_ = self._get_chunk_and_label(index)
@@ -429,7 +431,6 @@ class TBChips(CropNetBase):
             tb_chip = (tb_chip - np.min(tb_chip)) \
                     / (np.max(tb_chip) - np.min(tb_chip))
         tb_chip = torch.FloatTensor(tb_chip).unsqueeze(0)
-        self._update_item_ct()
         return tb_chip,tb_chip
 
     def get_data(self, index=0):
